@@ -28,7 +28,7 @@ const currentUserId = ref<number | null>(null)
 const { isLoading, hasMore, handleScroll, loadNextPage, reset } = useInfiniteScroll()
 
 // トースト機能
-const { error: showErrorToast } = useToast()
+const { error: showErrorToast, success: showSuccessToast } = useToast()
 
 // 投稿一覧を取得（ページネーション対応）
 const fetchPosts = async (page: number = 1) => {
@@ -107,6 +107,7 @@ const handlePostDeleted = async (postId: number) => {
     if (response.success) {
       console.log('✅ 投稿削除成功:', response.message)
       // 成功時は何もしない（既にUIから削除済み）
+      showSuccessToast('投稿を削除しました')
     } else {
       console.error('❌ 投稿削除失敗:', response.error)
       // 失敗時は元の位置に投稿を復元

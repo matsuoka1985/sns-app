@@ -77,11 +77,27 @@ const loadMore = async () => {
   if (r.pagination) setHasMore?.(r.pagination.has_more_pages)
 }
 const handleDeleted = async (id: number) => {
-  const r = await $fetch(`http://localhost/api/posts/${id}`, {
-    method: 'DELETE', credentials: 'include'
-  })
-  r.success ? (showOk('投稿削除'), await navigateTo('/'))
-    : showErr('削除失敗')
+  console.log('handleDeleted called with id:', id)
+  try {
+    const r = await $fetch(`http://localhost/api/posts/${id}`, {
+      method: 'DELETE', credentials: 'include'
+    })
+    console.log('Delete response:', r)
+    if (r.success) {
+      console.log('Delete successful, showing toast')
+      showOk('投稿を削除しました')
+      // トーストが表示されるまで少し待ってからリダイレクト
+      setTimeout(async () => {
+        await navigateTo('/')
+      }, 2000)
+    } else {
+      console.log('Delete failed')
+      showErr('削除に失敗しました')
+    }
+  } catch (error) {
+    console.log('Delete error:', error)
+    showErr('削除に失敗しました')
+  }
 }
 const handleSubmit = (c: CommentData) => comments.value.unshift(c)
 

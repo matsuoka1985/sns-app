@@ -3,6 +3,7 @@ export const useAuth = () => {
   const user = ref(null)
   const loading = ref(true)
 
+
   // Firebase認証状態の監視
   const checkAuthState = () => {
     const { $firebaseAuth } = useNuxtApp()
