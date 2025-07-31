@@ -121,33 +121,36 @@ useHead(() => ({
       <SideNav />
 
       <div class="flex-1 flex flex-col">
-        <LoadingState v-if="isLoading" />
+        <!-- ヘッダー (常に表示) -->
+        <div ref="headerRef" class="bg-custom-dark border-l border-b border-white p-4">
+          <h1 class="text-white text-xl font-bold">コメント</h1>
+        </div>
 
-        <div v-else-if="post">
-          <!-- ヘッダー (固定ではなくスクロール対象) -->
-          <div ref="headerRef" class="bg-custom-dark border-l border-b border-white p-4">
-            <h1 class="text-white text-xl font-bold">コメント</h1>
+        <!-- 投稿エリア -->
+        <div ref="postRef">
+          <div v-if="isLoading" class="flex justify-center items-center py-8">
+            <LoadingSpinner size="lg" />
           </div>
+          <Message
+            v-else-if="post"
+            :id="post.id"
+            :body="post.body"
+            :user="post.user"
+            :likes-count="post.likes_count"
+            :is-liked="post.is_liked"
+            :current-user-id="currentUserId || undefined"
+            :show-detail-button="false"
+            @deleted="handleDeleted"
+          />
+        </div>
 
-          <!-- 投稿 -->
-          <div ref="postRef">
-            <Message
-              :id="post.id"
-              :body="post.body"
-              :user="post.user"
-              :likes-count="post.likes_count"
-              :is-liked="post.is_liked"
-              :current-user-id="currentUserId || undefined"
-              :show-detail-button="false"
-              @deleted="handleDeleted"
-            />
-          </div>
-
+        <template v-if="!isLoading">
           <!-- コメント見出し -->
           <div ref="headingRef" class="bg-custom-dark border-l border-b border-white py-4 px-6 text-center">
             <span class="text-white text-lg font-medium">コメント</span>
           </div>
 
+          <!-- コメント一覧エリア -->
           <div ref="listRef" :style="{ maxHeight: listMax + 'px', overflowY: 'auto' }">
             <CommentList :comments="comments" />
             <InfiniteScrollLoader
@@ -156,12 +159,12 @@ useHead(() => ({
               :posts-count="comments.length"
             />
           </div>
-        </div>
 
-        <!-- コメントフォーム (最下行) -->
-        <div v-if="post" ref="formRef" class="bg-custom-dark">
-          <CommentForm :post-id="post.id" @submitted="handleSubmit" />
-        </div>
+          <!-- コメントフォーム -->
+          <div ref="formRef" class="bg-custom-dark">
+            <CommentForm :post-id="post?.id || 0" @submitted="handleSubmit" />
+          </div>
+        </template>
       </div>
     </div>
 
