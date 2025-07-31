@@ -6,7 +6,7 @@ const getToastStyles = (type: string) => {
   
   switch (type) {
     case 'success':
-      return `${baseStyles} bg-green-600 text-white`
+      return `${baseStyles} bg-purple-gradient text-white`
     case 'error':
       return `${baseStyles} bg-red-600 text-white`
     case 'warning':
@@ -48,7 +48,26 @@ const getIcon = (type: string) => {
           :class="getToastStyles(toast.type)"
         >
           <span class="text-lg">{{ getIcon(toast.type) }}</span>
-          <span class="flex-1">{{ toast.message }}</span>
+          <div class="flex-1">
+            <span>{{ toast.message }}</span>
+            <div v-if="toast.action" class="mt-2">
+              <NuxtLink
+                v-if="toast.action.to"
+                :to="toast.action.to"
+                class="text-sm bg-white/20 hover:bg-white/30 px-3 py-1 rounded transition-colors"
+                @click="removeToast(toast.id)"
+              >
+                {{ toast.action.label }}
+              </NuxtLink>
+              <button
+                v-else-if="toast.action.action"
+                @click="toast.action.action(); removeToast(toast.id)"
+                class="text-sm bg-white/20 hover:bg-white/30 px-3 py-1 rounded transition-colors"
+              >
+                {{ toast.action.label }}
+              </button>
+            </div>
+          </div>
           <button
             @click="removeToast(toast.id)"
             class="text-white hover:text-gray-300 transition-colors"

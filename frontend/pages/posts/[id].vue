@@ -27,11 +27,11 @@ const listMax = ref<number>(0)
 
 const updateListHeight = () => {
   nextTick(() => {
-    const headerH  = headerRef.value?.offsetHeight  ?? 0
-    const postH    = postRef.value?.offsetHeight    ?? 0
+    const headerH = headerRef.value?.offsetHeight ?? 0
+    const postH = postRef.value?.offsetHeight ?? 0
     const headingH = headingRef.value?.offsetHeight ?? 0
-    const formH    = formRef.value?.offsetHeight    ?? 0
-    listMax.value  = window.innerHeight - headerH - postH - headingH - formH
+    const formH = formRef.value?.offsetHeight ?? 0
+    listMax.value = window.innerHeight - headerH - postH - headingH - formH
   })
 }
 
@@ -131,17 +131,7 @@ useHead(() => ({
           <div v-if="isLoading" class="flex justify-center items-center py-8">
             <LoadingSpinner size="lg" />
           </div>
-          <Message
-            v-else-if="post"
-            :id="post.id"
-            :body="post.body"
-            :user="post.user"
-            :likes-count="post.likes_count"
-            :is-liked="post.is_liked"
-            :current-user-id="currentUserId || undefined"
-            :show-detail-button="false"
-            @deleted="handleDeleted"
-          />
+          <Message v-else-if="post" :id="post.id" :body="post.body" :user="post.user" :likes-count="post.likes_count" :is-liked="post.is_liked" :current-user-id="currentUserId || undefined" :show-detail-button="false" @deleted="handleDeleted" />
         </div>
 
         <template v-if="!isLoading">
@@ -153,11 +143,7 @@ useHead(() => ({
           <!-- コメント一覧エリア -->
           <div ref="listRef" :style="{ maxHeight: listMax + 'px', overflowY: 'auto' }">
             <CommentList :comments="comments" />
-            <InfiniteScrollLoader
-              :is-loading="isLoadingMore"
-              :has-more="hasMore"
-              :posts-count="comments.length"
-            />
+            <InfiniteScrollLoader :is-loading="isLoadingMore" :has-more="hasMore" :posts-count="comments.length" />
           </div>
 
           <!-- コメントフォーム -->

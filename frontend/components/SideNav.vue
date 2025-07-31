@@ -30,6 +30,9 @@ const isPosting = ref(false)
 // 親から新規投稿追加関数をinject
 const addNewPost = inject<(post: any) => void>('addNewPost', () => {})
 
+// トースト
+const { success } = useToast()
+
 const handlePost = handleSubmit(async (values) => {
   isPosting.value = true
   try {
@@ -43,6 +46,12 @@ const handlePost = handleSubmit(async (values) => {
     // レスポンスから新しい投稿データを取得して追加
     if (response.success && response.post) {
       addNewPost(response.post)
+      
+      // 投稿成功トーストに詳細リンクを追加
+      success('投稿しました！', 5000, {
+        label: '詳細を見る',
+        to: `/posts/${response.post.id}`
+      })
     }
 
     resetForm()
