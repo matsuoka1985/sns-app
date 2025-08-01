@@ -37,10 +37,8 @@ const handlePost = handleSubmit(async (values) => {
   isPosting.value = true
   try {
     const response = await $fetch('/api/posts', {
-      baseURL: 'http://localhost',
       method: 'POST',
-      body: { content: values.content },
-      credentials: 'include',
+      body: { content: values.content }
     })
 
     // レスポンスから新しい投稿データを取得して追加
@@ -64,9 +62,7 @@ const handlePost = handleSubmit(async (values) => {
 /* ログアウト */
 async function handleLogout() {
   await $fetch('/api/auth/logout', {
-    baseURL: 'http://localhost',
-    method: 'POST',
-    credentials: 'include',
+    method: 'POST'
   })
   await navigateTo('/login')
 }

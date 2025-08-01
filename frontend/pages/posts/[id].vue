@@ -79,8 +79,8 @@ const loadMore = async () => {
 const handleDeleted = async (id: number) => {
   console.log('handleDeleted called with id:', id)
   try {
-    const r = await $fetch(`http://localhost/api/posts/${id}`, {
-      method: 'DELETE', credentials: 'include'
+    const r = await $fetch(`/api/posts/${id}`, {
+      method: 'DELETE'
     })
     console.log('Delete response:', r)
     if (r.success) {

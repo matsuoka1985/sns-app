@@ -77,9 +77,8 @@ const toggleLike = async () => {
 
   try {
     const method = originalIsLiked ? 'DELETE' : 'POST'
-    const response = await $fetch(`http://localhost/api/posts/${props.postId}/like`, {
-      method: method,
-      credentials: 'include'
+    const response = await $fetch(`/api/posts/${props.postId}/like`, {
+      method: method
     })
 
     if ((response as any).success) {

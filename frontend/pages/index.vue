@@ -99,9 +99,8 @@ const handlePostDeleted = async (postId: number) => {
 
   try {
     // バックグラウンドでAPI呼び出し
-    const response = await $fetch(`http://localhost/api/posts/${postId}`, {
-      method: 'DELETE',
-      credentials: 'include'
+    const response = await $fetch(`/api/posts/${postId}`, {
+      method: 'DELETE'
     })
 
     if (response.success) {

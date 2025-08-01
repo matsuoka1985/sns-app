@@ -64,40 +64,19 @@ const onSubmit = handleSubmit(async (values) => {
     const idToken = await firebaseUser.getIdToken()
     console.log('🎫 Firebase IDトークン:', idToken)
 
-    // Laravel APIにログイン情報を送信（必要に応じて）
-    const response = await $fetch('http://localhost/api/auth/firebase-login', { 
+    // Nuxt API routeでHttpOnly Cookieを設定
+    const response = await $fetch('/api/auth/login', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`
-      },
       body: {
-        firebase_uid: firebaseUser.uid,
-        email: values.email
-      },
-      credentials: 'include'
+        idToken: idToken
+      }
     })
 
     // APIレスポンスをコンソールに表示
-    console.log('📡 Laravel API レスポンス:', response)
+    console.log('📡 Nuxt API レスポンス:', response)
 
     if (response.success) {
-      console.log('✅ ログイン成功!', response.user || response)
-      
-      // 手動でauth_jwtクッキーを設定（Laravel側で設定されない場合の対策）
-      const authCookie = useCookie('auth_jwt', {
-        httpOnly: false, // クライアントサイドで設定するためfalse
-        secure: false,
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 // 24時間
-      })
-      authCookie.value = idToken
-      
-      // 古いクライアントサイドCookieを削除
-      const oldAuthCookie = useCookie('firebase-auth-token')
-      oldAuthCookie.value = null
-      
-      console.log('🍪 auth_jwtクッキーを手動設定:', idToken.substring(0, 50) + '...')
+      console.log('✅ ログイン成功! HttpOnly Cookie設定完了:', response.user)
       
       // ログイン成功をemitで親コンポーネントに通知
       emit('success')
