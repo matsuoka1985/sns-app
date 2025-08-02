@@ -29,9 +29,36 @@ const { errors, defineField, handleSubmit, resetForm, setFieldError } = useForm(
 const [content, contentAttrs] = defineField('content')
 const isPosting = ref(false)
 
-// 入力時にエラーをクリア
+// 文字数カウント関連
+const maxLength = 120
+const currentLength = computed(() => content.value?.length || 0)
+const remainingChars = computed(() => maxLength - currentLength.value)
+const isNearLimit = computed(() => remainingChars.value <= 10 && remainingChars.value >= 0)
+const isOverLimit = computed(() => remainingChars.value < 0)
+
+// ゲージの色とパーセンテージ
+const gaugeColor = computed(() => {
+  if (isOverLimit.value) return '#ef4444' // 赤色
+  if (isNearLimit.value) return '#f59e0b' // 黄色
+  return '#3b82f6' // 青色
+})
+
+const gaugePercentage = computed(() => {
+  const percentage = (currentLength.value / maxLength) * 100
+  return Math.min(percentage, 100)
+})
+
+// SVGドーナツゲージの計算
+const radius = 16
+const circumference = 2 * Math.PI * radius
+const strokeDasharray = computed(() => {
+  const progress = (gaugePercentage.value / 100) * circumference
+  return `${progress} ${circumference}`
+})
+
+// 入力時にエラーをクリア（ただし文字数超過時は除く）
 watch(content, () => {
-  if (errors.value.content) {
+  if (errors.value.content && currentLength.value <= maxLength) {
     setFieldError('content', undefined)
   }
 })
@@ -45,13 +72,12 @@ const { success } = useToast()
 const handlePost = async () => {
   // submit時のみバリデーション実行
   if (!content.value || content.value.trim() === '') {
-    // エラーを手動で設定
     setFieldError('content', '投稿内容を入力してください')
     return
   }
   
-  if (content.value.length > 120) {
-    setFieldError('content', '120文字以内で入力してください')
+  if (content.value.length > maxLength) {
+    setFieldError('content', `${maxLength}文字以内で入力してください`)
     return
   }
 
@@ -120,21 +146,69 @@ async function handleLogout() {
             <textarea
               v-model="content"
               v-bind="contentAttrs"
-              maxlength="120"
               :disabled="isPosting"
               placeholder="今何してる？"
               class="w-full h-32 p-3 bg-transparent border-2 border-white rounded-lg
                      text-white placeholder-gray-400 resize-none focus:outline-none"
             />
+            
+            <!-- 文字数ゲージと情報 -->
+            <div v-if="currentLength > 0" class="flex items-center justify-between mt-2">
+              <div class="flex items-center space-x-2">
+                <!-- ドーナツゲージ -->
+                <div class="relative">
+                  <svg width="36" height="36" class="transform -rotate-90">
+                    <!-- 背景の円 -->
+                    <circle
+                      cx="18"
+                      cy="18"
+                      :r="radius"
+                      stroke="#374151"
+                      stroke-width="3"
+                      fill="none"
+                    />
+                    <!-- プログレス円 -->
+                    <circle
+                      cx="18"
+                      cy="18"
+                      :r="radius"
+                      :stroke="gaugeColor"
+                      stroke-width="3"
+                      fill="none"
+                      stroke-linecap="round"
+                      :stroke-dasharray="strokeDasharray"
+                      :stroke-dashoffset="0"
+                      class="transition-all duration-300"
+                    />
+                  </svg>
+                </div>
+                
+                <!-- 文字数表示 -->
+                <span 
+                  v-if="isNearLimit || isOverLimit"
+                  :class="{
+                    'text-yellow-500': isNearLimit && !isOverLimit,
+                    'text-red-500': isOverLimit
+                  }"
+                  class="text-sm font-medium"
+                >
+                  {{ isOverLimit ? remainingChars : remainingChars }}
+                </span>
+              </div>
+            </div>
+            
             <!-- エラーメッセージ -->
-            <p v-if="errors.content" class="text-red-500 text-sm mt-1">{{ errors.content }}</p>
+            <div class="h-6 mt-1">
+              <p v-if="errors.content" class="text-red-500 text-sm">{{ errors.content }}</p>
+            </div>
 
             <div class="flex justify-end mt-4 space-x-2">
               <BaseButton
                 type="submit"
                 size="sm"
                 :loading="isPosting"
-                :disabled="isPosting"
+                :disabled="isPosting || isOverLimit"
+                :class="{ 'opacity-50': isOverLimit && !isPosting }"
               >
                 シェアする
               </BaseButton>
@@ -172,21 +246,69 @@ async function handleLogout() {
         <textarea
           v-model="content"
           v-bind="contentAttrs"
-          maxlength="120"
           :disabled="isPosting"
           placeholder="今何してる？"
           class="w-full h-32 p-4 bg-transparent border-2 border-white rounded-lg
                  text-white placeholder-gray-400 resize-none focus:outline-none"
         />
+        
+        <!-- 文字数ゲージと情報 -->
+        <div v-if="currentLength > 0" class="flex items-center justify-between mt-2">
+          <div class="flex items-center space-x-2">
+            <!-- ドーナツゲージ -->
+            <div class="relative">
+              <svg width="36" height="36" class="transform -rotate-90">
+                <!-- 背景の円 -->
+                <circle
+                  cx="18"
+                  cy="18"
+                  :r="radius"
+                  stroke="#374151"
+                  stroke-width="3"
+                  fill="none"
+                />
+                <!-- プログレス円 -->
+                <circle
+                  cx="18"
+                  cy="18"
+                  :r="radius"
+                  :stroke="gaugeColor"
+                  stroke-width="3"
+                  fill="none"
+                  stroke-linecap="round"
+                  :stroke-dasharray="strokeDasharray"
+                  :stroke-dashoffset="0"
+                  class="transition-all duration-300"
+                />
+              </svg>
+            </div>
+            
+            <!-- 文字数表示 -->
+            <span 
+              v-if="isNearLimit || isOverLimit"
+              :class="{
+                'text-yellow-500': isNearLimit && !isOverLimit,
+                'text-red-500': isOverLimit
+              }"
+              class="text-sm font-medium"
+            >
+              {{ isOverLimit ? remainingChars : remainingChars }}
+            </span>
+          </div>
+        </div>
+        
         <!-- エラーメッセージ -->
-        <p v-if="errors.content" class="text-red-500 text-sm mt-1">{{ errors.content }}</p>
+        <div class="h-6 mt-1">
+          <p v-if="errors.content" class="text-red-500 text-sm">{{ errors.content }}</p>
+        </div>
 
         <div class="flex justify-end mt-4">
           <BaseButton
             type="submit"
             size="sm"
             :loading="isPosting"
-            :disabled="isPosting"
+            :disabled="isPosting || isOverLimit"
+            :class="{ 'opacity-50': isOverLimit && !isPosting }"
           >
             シェアする
           </BaseButton>
