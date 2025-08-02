@@ -85,7 +85,11 @@ const handleDeleted = async (id: number) => {
     console.log('Delete response:', r)
     if (r.success) {
       console.log('Delete successful, showing toast')
-      showOk('投稿を削除しました')
+      // 復元アクション付きトーストを表示
+      showOk('投稿を削除しました', 8000, {
+        label: '復元しますか？',
+        action: () => restorePostFromDetail(id)
+      })
       // トーストが表示されるまで少し待ってからリダイレクト
       setTimeout(async () => {
         await navigateTo('/')
@@ -99,6 +103,31 @@ const handleDeleted = async (id: number) => {
     showErr('削除に失敗しました')
   }
 }
+
+// 詳細ページから復元処理
+const restorePostFromDetail = async (postId: string) => {
+  try {
+    console.log('🔄 投稿復元開始:', postId)
+    
+    const response = await $fetch(`/api/posts/${postId}/restore`, {
+      method: 'POST'
+    })
+
+    if (response.success) {
+      console.log('✅ 投稿復元成功:', response.message)
+      showOk('投稿を復元しました')
+      // 復元後は詳細ページに戻る
+      await navigateTo(`/posts/${postId}`)
+    } else {
+      console.error('❌ 投稿復元失敗:', response.error)
+      showErr('投稿の復元に失敗しました')
+    }
+  } catch (error) {
+    console.error('投稿復元エラー:', error)
+    showErr('投稿の復元でエラーが発生しました')
+  }
+}
+
 const handleSubmit = (c: CommentData) => comments.value.unshift(c)
 
 /* 初期ロード ----------------------------------------------- */

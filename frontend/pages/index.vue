@@ -106,7 +106,11 @@ const handlePostDeleted = async (postId: number) => {
     if (response.success) {
       console.log('✅ 投稿削除成功:', response.message)
       // 成功時は何もしない（既にUIから削除済み）
-      showSuccessToast('投稿を削除しました')
+      // 復元アクション付きトーストを表示
+      showSuccessToast('投稿を削除しました', 8000, {
+        label: '復元しますか？',
+        action: () => restorePost(postId, targetPost, targetIndex)
+      })
     } else {
       console.error('❌ 投稿削除失敗:', response.error)
       // 失敗時は元の位置に投稿を復元
@@ -131,6 +135,30 @@ const handlePostDeleted = async (postId: number) => {
     } else {
       showErrorToast('ネットワークエラーが発生しました')
     }
+  }
+}
+
+// 投稿復元処理
+const restorePost = async (postId: number, post: Post, originalIndex: number) => {
+  try {
+    console.log('🔄 投稿復元開始:', postId)
+    
+    const response = await $fetch(`/api/posts/${postId}/restore`, {
+      method: 'POST'
+    })
+
+    if (response.success) {
+      console.log('✅ 投稿復元成功:', response.message)
+      // 元の位置に投稿を復元
+      posts.value.splice(originalIndex, 0, post)
+      showSuccessToast('投稿を復元しました')
+    } else {
+      console.error('❌ 投稿復元失敗:', response.error)
+      showErrorToast('投稿の復元に失敗しました')
+    }
+  } catch (error) {
+    console.error('投稿復元エラー:', error)
+    showErrorToast('投稿の復元でエラーが発生しました')
   }
 }
 

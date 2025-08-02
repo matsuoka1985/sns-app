@@ -132,6 +132,7 @@ Route::get('/posts', [PostController::class, 'index']);
 Route::post('/posts', [PostController::class, 'store']);
 Route::get('/posts/{id}', [PostController::class, 'show']);
 Route::delete('/posts/{id}', [PostController::class, 'destroy']);
+Route::post('/posts/{id}/restore', [PostController::class, 'restore']);
 
 // いいね関連のエンドポイント
 Route::post('/posts/{postId}/like', [LikeController::class, 'store']);

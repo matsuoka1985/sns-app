@@ -326,17 +326,18 @@ class PostController extends Controller
                 ], 403);
             }
 
-            // 投稿を削除（関連するいいねも cascade で自動削除される）
+            // 論理削除（SoftDelete）を実行
             $post->delete();
 
-            \Log::info('投稿削除成功', [
+            \Log::info('投稿論理削除成功', [
                 'post_id' => $id,
                 'user_id' => $user->id
             ]);
 
             return response()->json([
                 'success' => true,
-                'message' => '投稿を削除しました'
+                'message' => '投稿を削除しました',
+                'post_id' => $id
             ]);
 
         } catch (Exception $e) {
@@ -345,6 +346,86 @@ class PostController extends Controller
             return response()->json([
                 'success' => false,
                 'error' => '投稿の削除に失敗しました'
+            ], 500);
+        }
+    }
+
+    /**
+     * 投稿を復元（論理削除から復旧）
+     */
+    public function restore(Request $request, $id)
+    {
+        try {
+            // JWTから認証情報を取得
+            $jwt = $request->cookie('auth_jwt');
+
+            if (empty($jwt)) {
+                return response()->json([
+                    'success' => false,
+                    'error' => '認証が必要です'
+                ], 401);
+            }
+
+            // Firebase Admin SDK でJWT検証
+            $factory = (new Factory)->withServiceAccount(config('firebase.credentials.file'));
+            $firebaseAuth = $factory->createAuth();
+            $verifiedIdToken = $firebaseAuth->verifyIdToken($jwt);
+            $firebaseUid = $verifiedIdToken->claims()->get('sub');
+
+            // Firebase UIDからユーザーIDを取得
+            $user = User::where('firebase_uid', $firebaseUid)->first();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'ユーザーが見つかりません'
+                ], 404);
+            }
+
+            // 削除された投稿を取得（withTrashedで論理削除も含む）
+            $post = Post::withTrashed()->find($id);
+            if (!$post) {
+                return response()->json([
+                    'success' => false,
+                    'error' => '投稿が見つかりません'
+                ], 404);
+            }
+
+            // 投稿が削除されているかチェック
+            if (!$post->trashed()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'この投稿は削除されていません'
+                ], 400);
+            }
+
+            // 投稿の所有者チェック（自分の投稿のみ復元可能）
+            if ($post->user_id !== $user->id) {
+                return response()->json([
+                    'success' => false,
+                    'error' => '他のユーザーの投稿は復元できません'
+                ], 403);
+            }
+
+            // 投稿を復元
+            $post->restore();
+
+            \Log::info('投稿復元成功', [
+                'post_id' => $id,
+                'user_id' => $user->id
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => '投稿を復元しました',
+                'post_id' => $id
+            ]);
+
+        } catch (Exception $e) {
+            \Log::error('投稿復元エラー', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'error' => '投稿の復元に失敗しました'
             ], 500);
         }
     }
