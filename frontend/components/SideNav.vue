@@ -15,17 +15,26 @@ const validationSchema = toTypedSchema(
 )
 
 // vee-validateのフォーム設定
-const { errors, defineField, handleSubmit, resetForm } = useForm({
-  validationSchema,
+const { errors, defineField, handleSubmit, resetForm, setFieldError } = useForm({
+  validationSchema: toTypedSchema(
+    yup.lazy(() => 
+      yup.object({
+        content: yup.string().max(120, '120文字以内で入力してください')
+      })
+    )
+  ),
   validateOnMount: false
 })
 
-const [content, contentAttrs] = defineField('content', {
-  validateOnBlur: false,
-  validateOnChange: false,
-  validateOnInput: false
-})
+const [content, contentAttrs] = defineField('content')
 const isPosting = ref(false)
+
+// 入力時にエラーをクリア
+watch(content, () => {
+  if (errors.value.content) {
+    setFieldError('content', undefined)
+  }
+})
 
 // 親から新規投稿追加関数をinject
 const addNewPost = inject<(post: any) => void>('addNewPost', () => {})
@@ -33,12 +42,27 @@ const addNewPost = inject<(post: any) => void>('addNewPost', () => {})
 // トースト
 const { success } = useToast()
 
-const handlePost = handleSubmit(async (values) => {
+const handlePost = async () => {
+  // submit時のみバリデーション実行
+  if (!content.value || content.value.trim() === '') {
+    // エラーを手動で設定
+    setFieldError('content', '投稿内容を入力してください')
+    return
+  }
+  
+  if (content.value.length > 120) {
+    setFieldError('content', '120文字以内で入力してください')
+    return
+  }
+
+  // バリデーション成功時はエラーをクリア
+  setFieldError('content', undefined)
+
   isPosting.value = true
   try {
     const response = await $fetch('/api/posts', {
       method: 'POST',
-      body: { content: values.content }
+      body: { content: content.value }
     })
 
     // レスポンスから新しい投稿データを取得して追加
@@ -57,7 +81,7 @@ const handlePost = handleSubmit(async (values) => {
   } finally {
     isPosting.value = false
   }
-})
+}
 
 /* ログアウト */
 async function handleLogout() {
