@@ -21,7 +21,7 @@ const props = withDefaults(defineProps<Props>(), {
   size: 'md'
 })
 
-const emit = defineEmits<Emits>()
+const emit = defineEmits<Emits>();
 
 // クリックハンドラー
 const handleClick = (event: MouseEvent) => {
@@ -33,23 +33,23 @@ const handleClick = (event: MouseEvent) => {
 // 動的なクラス設定
 const buttonClass = computed(() => {
   const baseClass = 'font-medium rounded-full transition-all duration-200 focus:outline-none shadow-lg transform border border-black'
-  
+
   // サイズクラス
   const sizeClasses = {
     sm: 'py-2 px-8 text-sm',
     md: 'py-3 px-12 text-base',
     lg: 'py-4 px-16 text-lg'
   }
-  
+
   // バリアントクラス
   const variantClasses = {
-    primary: 'bg-purple-gradient text-white hover:bg-purple-800 hover:scale-105 hover:shadow-xl disabled:bg-purple-400 disabled:hover:scale-100 disabled:hover:shadow-lg',
-    secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200 hover:scale-105 hover:shadow-xl disabled:bg-gray-300 disabled:hover:scale-100 disabled:hover:shadow-lg'
+    primary: 'bg-purple-gradient text-white hover:opacity-90 disabled:bg-gray-600 disabled:opacity-50 disabled:hover:opacity-50',
+    secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200 disabled:bg-gray-300 disabled:opacity-50'
   }
-  
+
   const sizeClass = sizeClasses[props.size]
   const variantClass = variantClasses[props.variant]
-  
+
   return `${baseClass} ${sizeClass} ${variantClass}`
 })
 </script>

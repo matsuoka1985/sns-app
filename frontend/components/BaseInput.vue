@@ -24,7 +24,7 @@ const props = withDefaults(defineProps<Props>(), {
   disabled: false
 })
 
-const emit = defineEmits<Emits>()
+const emit = defineEmits<Emits>();
 
 // 入力時のハンドラー
 const handleInput = (event: Event) => {
@@ -60,7 +60,7 @@ const inputClass = computed(() => {
       :disabled="disabled"
       :value="modelValue"
       @input="handleInput"
-      @blur="handleBlur" 
+      @blur="handleBlur"
       :class="inputClass"
     />
     <div v-if="errorMessage" class="text-red-500 text-sm mt-2 px-4">

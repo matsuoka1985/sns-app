@@ -1,7 +1,4 @@
 <script setup lang="ts">
-import { useForm } from 'vee-validate'
-import { toTypedSchema } from '@vee-validate/yup'
-import * as yup from 'yup'
 
 // 認証必須ページ
 definePageMeta({
@@ -121,74 +118,12 @@ const loadMoreComments = async () => {
   }
 }
 
-// いいね機能（デバウンス付き楽観的更新）
-const likingPost = ref(false)
-const likeTimeout = ref<NodeJS.Timeout | null>(null)
-const pendingLikeState = ref<boolean | null>(null)
+// いいね機能
+const { likingPosts, handleLike, cleanup: cleanupLike } = useLike()
 
+// いいねハンドラー（投稿詳細用）
 const handlePostLike = () => {
-  if (!post.value) return
-
-  // 既存のタイマーをクリア
-  if (likeTimeout.value) {
-    clearTimeout(likeTimeout.value)
-    likeTimeout.value = null
-  }
-
-  // 楽観的更新（即座にUIを更新）
-  const wasLiked = post.value.is_liked
-  post.value.is_liked = !wasLiked
-  post.value.likes_count += wasLiked ? -1 : 1
-
-  // 最終的ないいね状態を保存
-  pendingLikeState.value = post.value.is_liked
-
-  // 処理中状態にマーク
-  likingPost.value = true
-
-  // 300msデバウンス - この間に追加クリックがあればタイマーをリセット
-  likeTimeout.value = setTimeout(async () => {
-    await executeLikeRequest()
-  }, 300)
-}
-
-// 実際のいいねリクエストを実行
-const executeLikeRequest = async () => {
-  if (!post.value || pendingLikeState.value === null) {
-    likingPost.value = false
-    return
-  }
-
-  const finalLikeState = pendingLikeState.value
-
-  try {
-    const response = await $fetch(`/api/posts/${postId}/like`, {
-      method: 'POST',
-      body: {
-        isLiked: finalLikeState
-      }
-    })
-
-    if (response.success) {
-      // サーバーからの正確な値で更新（Vue reactivity確保のため新しいオブジェクトで更新）
-      Object.assign(post.value, {
-        is_liked: response.is_liked,
-        likes_count: response.likes_count
-      })
-      console.log('✅ いいね更新完了:', { postId, is_liked: post.value.is_liked, likes_count: response.likes_count })
-    } else {
-      console.error('❌ いいね失敗:', response.error)
-      showErrorToast('いいねの処理に失敗しました')
-    }
-  } catch (error) {
-    // エラー時も無言で処理（UIは既に楽観的更新済み）
-    console.log('いいねリクエスト完了 (エラー):', { postId })
-  } finally {
-    // クリーンアップ
-    likingPost.value = false
-    pendingLikeState.value = null
-    likeTimeout.value = null
-  }
+  handleLike(post.value)
 }
 
 // 投稿削除ハンドラー
@@ -251,94 +186,17 @@ const restorePost = async (postId: number) => {
 // 新しいコメントを追加するハンドラー
 const handleNewComment = (newComment: Comment) => {
   comments.value.unshift(newComment)
+  post.value.comments_count += 1
+  updateCommentsListHeight()
 }
 
-// コメント作成処理とバリデーション
-const isCommenting = ref(false)
+// 新しい投稿を処理するハンドラー
+const handleNewPost = (newPost: any) => {
+  sharedPostBody.value = ''
+  // 投稿成功通知はDesktopSidebar内で処理済み
+}
 
-// vee-validateのスキーマ
-const commentValidationSchema = toTypedSchema(
-  yup.object({
-    commentContent: yup.string().max(120, '120文字以内で入力してください')
-  })
-)
 
-// vee-validateのフォーム設定
-const { errors: commentErrors, defineField: commentDefineField, handleSubmit: commentHandleSubmit, resetForm: commentResetForm, setFieldError: commentSetFieldError } = useForm({
-  validationSchema: commentValidationSchema,
-  validateOnMount: false
-})
-
-const [commentContent, commentContentAttrs] = commentDefineField('commentContent')
-
-// コメント文字数カウント関連
-const maxLength = 120
-const commentCurrentLength = computed(() => commentContent.value?.length || 0)
-const commentRemainingChars = computed(() => maxLength - commentCurrentLength.value)
-const commentIsNearLimit = computed(() => commentRemainingChars.value <= 10 && commentRemainingChars.value >= 0)
-const commentIsOverLimit = computed(() => commentRemainingChars.value < 0)
-
-// ゲージの色とパーセンテージ
-const commentGaugeColor = computed(() => {
-  if (commentIsOverLimit.value) return '#ef4444' // 赤色
-  if (commentIsNearLimit.value) return '#f59e0b' // 黄色
-  return '#3b82f6' // 青色
-})
-
-const commentGaugePercentage = computed(() => {
-  const percentage = (commentCurrentLength.value / maxLength) * 100
-  return Math.min(percentage, 100)
-})
-
-// SVGドーナツゲージの計算
-const commentRadius = 16
-const commentCircumference = 2 * Math.PI * commentRadius
-const commentStrokeDasharray = computed(() => {
-  const progress = (commentGaugePercentage.value / 100) * commentCircumference
-  return `${progress} ${commentCircumference}`
-})
-
-// 入力時にエラーをクリア＆高さ再計算
-watch(commentContent, () => {
-  if (commentErrors.value.commentContent && commentCurrentLength.value <= maxLength) {
-    commentSetFieldError('commentContent', undefined)
-  }
-  // コメントフォームの高さが変わる可能性があるので再計算
-  updateCommentsListHeight()
-})
-
-const createComment = commentHandleSubmit(async () => {
-  // submit時のみバリデーション実行
-  const content = commentContent.value || ''
-  if (!content || content.trim() === '') {
-    commentSetFieldError('commentContent', 'コメント内容を入力してください')
-    return
-  }
-
-  if (content.length > maxLength) {
-    return // バリデーションスキーマでエラーが表示される
-  }
-
-  isCommenting.value = true
-  try {
-    const response = await $fetch(`/api/posts/${postId}/comments`, {
-      method: 'POST',
-      body: { body: content.trim() }
-    })
-
-    if (response.success && response.comment) {
-      handleNewComment(response.comment)
-      commentResetForm()
-      updateCommentsListHeight()
-      showSuccessToast('コメントしました！')
-    }
-  } catch (error) {
-    console.error('コメント作成エラー:', error)
-    showErrorToast('コメントの作成に失敗しました')
-  } finally {
-    isCommenting.value = false
-  }
-})
 
 // クリーンアップ関数を格納する変数
 let cleanupCommentScroll: (() => void) | null = null
@@ -364,75 +222,33 @@ const mobileCommentsListHeight = ref('auto')
 const showMobileModal = ref(false)
 const isMobilePosting = ref(false)
 
-// モバイル投稿用バリデーションスキーマ
-const mobileValidationSchema = toTypedSchema(
-  yup.object({
-    mobileContent: yup.string().max(120, '120文字以内で入力してください')
-  })
-)
+// デスクトップとモバイルで共有する投稿内容
+const sharedPostBody = ref('')
 
-// vee-validateのフォーム設定（モバイル用）
-const { errors: mobileErrors, defineField: mobileDefineField, handleSubmit: mobileHandleSubmit, resetForm: mobileResetForm, setFieldError: mobileSetFieldError } = useForm({
-  validationSchema: mobileValidationSchema,
-  validateOnMount: false
-})
+// デスクトップとモバイルで共有するコメント内容
+const sharedCommentBody = ref('')
 
-const [mobileContent, mobileContentAttrs] = mobileDefineField('mobileContent')
 
-// モバイル投稿の文字数カウント関連
-const mobileCurrentLength = computed(() => mobileContent.value?.length || 0)
-const mobileRemainingChars = computed(() => maxLength - mobileCurrentLength.value)
-const mobileIsNearLimit = computed(() => mobileRemainingChars.value <= 10 && mobileRemainingChars.value >= 0)
-const mobileIsOverLimit = computed(() => mobileRemainingChars.value < 0)
-
-// モバイル用ゲージの色とパーセンテージ
-const mobileGaugeColor = computed(() => {
-  if (mobileIsOverLimit.value) return '#ef4444' // 赤色
-  if (mobileIsNearLimit.value) return '#f59e0b' // 黄色
-  return '#3b82f6' // 青色
-})
-
-const mobileGaugePercentage = computed(() => {
-  const percentage = (mobileCurrentLength.value / maxLength) * 100
-  return Math.min(percentage, 100)
-})
-
-// モバイル用SVGドーナツゲージの計算
-const mobileRadius = 16
-const mobileCircumference = 2 * Math.PI * mobileRadius
-const mobileStrokeDasharray = computed(() => {
-  const progress = (mobileGaugePercentage.value / 100) * mobileCircumference
-  return `${progress} ${mobileCircumference}`
-})
-
-// 入力時にエラーをクリア（ただし文字数超過時は除く）
-watch(mobileContent, () => {
-  if (mobileErrors.value.mobileContent && mobileCurrentLength.value <= maxLength) {
-    mobileSetFieldError('mobileContent', undefined)
-  }
-})
 
 // モバイル投稿処理
-const createMobilePost = mobileHandleSubmit(async () => {
-  // submit時のみバリデーション実行
-  if (!mobileContent.value || mobileContent.value.trim() === '') {
-    mobileSetFieldError('mobileContent', '投稿内容を入力してください')
+const createMobilePost = async () => {
+  if (!sharedPostBody.value || sharedPostBody.value.trim() === '') {
     return
   }
   
-  if (mobileContent.value.length > maxLength) {
-    return // バリデーションスキーマでエラーが表示される
+  if (sharedPostBody.value.length > 120) {
+    return
   }
 
   isMobilePosting.value = true
   try {
     const response = await $fetch('/api/posts', {
       method: 'POST',
-      body: { body: mobileContent.value.trim() }
+      body: { body: sharedPostBody.value.trim() }
     })
 
     if (response.success && response.post) {
-      mobileResetForm()
+      sharedPostBody.value = ''
       showMobileModal.value = false
       showSuccessToast('投稿しました！', 5000, {
         label: '詳細を見る',
@@ -446,7 +262,7 @@ const createMobilePost = mobileHandleSubmit(async () => {
   } finally {
     isMobilePosting.value = false
   }
-})
+}
 
 // ログアウト処理
 async function handleLogout() {
@@ -480,7 +296,7 @@ const updateCommentsListHeight = () => {
 
       // コメント送信フォームの高さを取得して、コメント一覧の高さを計算 + フローティングボタン用余白
       const formHeight = mobileCommentFormRef.value ? mobileCommentFormRef.value.offsetHeight : 144 // デフォルト値
-      const availableHeight = screenHeight - headerHeight - postHeight - commentsHeaderHeight - formHeight - 80
+      const availableHeight = screenHeight - headerHeight - postHeight - commentsHeaderHeight - formHeight - 32
       mobileCommentsListHeight.value = `${Math.max(availableHeight, 200)}px`
     }
   })
@@ -521,11 +337,8 @@ onUnmounted(() => {
   if (cleanupCommentScroll) cleanupCommentScroll()
   if (cleanupMobileCommentScroll) cleanupMobileCommentScroll()
 
-  // いいね機能のタイマーをクリア
-  if (likeTimeout.value) {
-    clearTimeout(likeTimeout.value)
-    likeTimeout.value = null
-  }
+  // いいね機能のクリーンアップ
+  cleanupLike()
 })
 
 // ページタイトル設定
@@ -540,9 +353,9 @@ useHead({
     <div class="hidden md:flex h-full">
       <!-- 左サイドバー -->
       <DesktopSidebar
-        :post-body="''"
-        @new-post="() => {}"
-        @update-body="() => {}"
+        :post-body="sharedPostBody"
+        @new-post="handleNewPost"
+        @update-body="sharedPostBody = $event"
       />
 
       <!-- 右メインコンテンツ: borderがある部分 -->
@@ -564,7 +377,7 @@ useHead({
                 v-else-if="post"
                 :post="post"
                 :current-user-id="currentUserId"
-                :is-liking="likingPost"
+                :is-liking="likingPosts.has(post?.id || 0)"
                 :show-detail-link="false"
                 @like="handlePostLike"
                 @delete="handlePostDeleted"
@@ -599,78 +412,11 @@ useHead({
 
           <!-- コメント送信フォーム: 左境界線無し -->
           <div ref="commentFormRef" class="p-6">
-            <form @submit.prevent="createComment" class="space-y-4">
-              <div class="border-2 border-white rounded-lg mb-4 focus-within:border-purple-500 transition-colors">
-                <textarea
-                  v-model="commentContent"
-                  v-bind="commentContentAttrs"
-                  :disabled="isCommenting"
-                  placeholder="コメントを入力..."
-                  class="w-full h-16 p-3 bg-transparent text-white placeholder-gray-400 resize-none outline-none border-none focus:outline-none focus:ring-0"
-                />
-              </div>
-
-              <!-- エラーメッセージ -->
-              <div class="h-6 mb-2">
-                <p v-if="commentErrors.commentContent" class="text-red-500 text-sm">{{ commentErrors.commentContent }}</p>
-              </div>
-
-              <!-- 文字数ゲージと送信ボタン -->
-              <div v-if="commentCurrentLength > 0" class="flex items-center justify-between mb-3">
-                <div class="flex items-center space-x-2">
-                  <!-- ドーナツゲージ -->
-                  <div class="relative">
-                    <svg width="36" height="36" class="transform -rotate-90">
-                      <!-- 背景の円 -->
-                      <circle
-                        cx="18"
-                        cy="18"
-                        :r="commentRadius"
-                        stroke="#374151"
-                        stroke-width="3"
-                        fill="none"
-                      />
-                      <!-- プログレス円 -->
-                      <circle
-                        cx="18"
-                        cy="18"
-                        :r="commentRadius"
-                        :stroke="commentGaugeColor"
-                        stroke-width="3"
-                        fill="none"
-                        stroke-linecap="round"
-                        :stroke-dasharray="commentStrokeDasharray"
-                        :stroke-dashoffset="0"
-                        class="transition-all duration-300"
-                      />
-                    </svg>
-                  </div>
-
-                  <!-- 文字数表示 -->
-                  <span
-                    v-if="commentIsNearLimit || commentIsOverLimit"
-                    :class="{
-                      'text-yellow-500': commentIsNearLimit && !commentIsOverLimit,
-                      'text-red-500': commentIsOverLimit
-                    }"
-                    class="text-sm font-medium"
-                  >
-                    {{ commentRemainingChars }}
-                  </span>
-                </div>
-              </div>
-
-              <div class="flex justify-end">
-                <button
-                  type="submit"
-                  :disabled="!(commentContent || '').trim() || isCommenting || commentIsOverLimit"
-                  class="bg-purple-gradient hover:opacity-90 disabled:bg-gray-600 disabled:opacity-50 text-white py-2 px-6 rounded-full font-medium transition-all"
-                  :class="{ 'opacity-50': commentIsOverLimit && !isCommenting }"
-                >
-                  {{ isCommenting ? 'コメント中...' : 'コメント' }}
-                </button>
-              </div>
-            </form>
+            <CommentForm
+              :post-id="postId"
+              v-model="sharedCommentBody"
+              @comment-created="handleNewComment"
+            />
           </div>
         </main>
       </div>
@@ -683,7 +429,9 @@ useHead({
         <!-- ヘッダー -->
         <header ref="mobileHeaderRef" class="bg-custom-dark border-b border-white p-4 flex-shrink-0">
           <div class="flex justify-center mb-2">
-            <img src="/images/logo.png" alt="SHARE" class="w-20 h-auto object-contain" />
+            <NuxtLink to="/">
+              <img src="/images/logo.png" alt="SHARE" class="w-20 h-auto object-contain hover:opacity-80 transition-opacity cursor-pointer" />
+            </NuxtLink>
           </div>
           <div class="flex justify-between items-center">
             <h1 class="text-white text-xl font-bold">コメント</h1>
@@ -704,7 +452,7 @@ useHead({
             v-else-if="post"
             :post="post"
             :current-user-id="currentUserId"
-            :is-liking="likingPost"
+            :is-liking="likingPosts.has(post?.id || 0)"
             :show-detail-link="false"
             :is-mobile="true"
             @like="handlePostLike"
@@ -739,83 +487,17 @@ useHead({
       </div>
 
       <!-- コメント送信フォーム（コメント一覧の直下） -->
-      <div ref="mobileCommentFormRef" class="p-4">
-        <form @submit.prevent="createComment" class="space-y-3">
-          <div class="border-2 border-white rounded-lg mb-3 focus-within:border-purple-500 transition-colors">
-            <textarea
-              v-model="commentContent"
-              v-bind="commentContentAttrs"
-              :disabled="isCommenting"
-              placeholder="コメントを入力..."
-              class="w-full h-16 p-3 bg-transparent text-white placeholder-gray-400 resize-none outline-none border-none focus:outline-none focus:ring-0 text-sm"
-            />
-          </div>
-
-          <!-- エラーメッセージ -->
-          <div class="h-6 mb-2">
-            <p v-if="commentErrors.commentContent" class="text-red-500 text-sm">{{ commentErrors.commentContent }}</p>
-          </div>
-
-          <!-- 文字数ゲージ -->
-          <div v-if="commentCurrentLength > 0" class="flex items-center justify-between mb-2">
-            <div class="flex items-center space-x-2">
-              <!-- ドーナツゲージ -->
-              <div class="relative">
-                <svg width="36" height="36" class="transform -rotate-90">
-                  <!-- 背景の円 -->
-                  <circle
-                    cx="18"
-                    cy="18"
-                    :r="commentRadius"
-                    stroke="#374151"
-                    stroke-width="3"
-                    fill="none"
-                  />
-                  <!-- プログレス円 -->
-                  <circle
-                    cx="18"
-                    cy="18"
-                    :r="commentRadius"
-                    :stroke="commentGaugeColor"
-                    stroke-width="3"
-                    fill="none"
-                    stroke-linecap="round"
-                    :stroke-dasharray="commentStrokeDasharray"
-                    :stroke-dashoffset="0"
-                    class="transition-all duration-300"
-                  />
-                </svg>
-              </div>
-
-              <!-- 文字数表示 -->
-              <span
-                v-if="commentIsNearLimit || commentIsOverLimit"
-                :class="{
-                  'text-yellow-500': commentIsNearLimit && !commentIsOverLimit,
-                  'text-red-500': commentIsOverLimit
-                }"
-                class="text-sm font-medium"
-              >
-                {{ commentRemainingChars }}
-              </span>
-            </div>
-          </div>
-
-          <div class="flex justify-end">
-            <button
-              type="submit"
-              :disabled="!(commentContent || '').trim() || isCommenting || commentIsOverLimit"
-              class="bg-purple-gradient hover:opacity-90 disabled:bg-gray-600 disabled:opacity-50 text-white py-2 px-6 rounded-full font-medium transition-all"
-              :class="{ 'opacity-50': commentIsOverLimit && !isCommenting }"
-            >
-              {{ isCommenting ? 'コメント中...' : 'コメント' }}
-            </button>
-          </div>
-        </form>
+      <div ref="mobileCommentFormRef" class="p-4 pb-24">
+        <CommentForm
+          :post-id="postId"
+          v-model="sharedCommentBody"
+          @comment-created="handleNewComment"
+        />
       </div>
 
-      <!-- フローティング投稿ボタン -->
+      <!-- フローティング投稿ボタン（コメント入力時は非表示） -->
       <button
+        v-show="!sharedCommentBody.trim()"
         @click="showMobileModal = true"
         class="fixed bottom-6 right-6 w-14 h-14 bg-purple-gradient hover:opacity-90 text-white rounded-full shadow-lg z-50 flex items-center justify-center transition-all"
       >
@@ -824,93 +506,13 @@ useHead({
     </div>
 
     <!-- モバイル投稿モーダル -->
-    <div v-if="showMobileModal" class="fixed inset-0 z-50 md:hidden">
-      <div class="absolute inset-0 bg-black/60" @click="showMobileModal = false"></div>
-      <div class="absolute inset-x-4 top-1/2 -translate-y-1/2 bg-custom-dark rounded-lg p-6">
-        <div class="flex justify-between items-center mb-4">
-          <h2 class="text-white text-lg font-medium">シェア</h2>
-          <button @click="showMobileModal = false" class="text-gray-400 hover:text-white">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
-          </button>
-        </div>
-
-        <!-- 投稿フォーム（モバイル用） -->
-        <form @submit.prevent="createMobilePost">
-          <div class="border-2 border-white rounded-lg mb-4 focus-within:border-purple-500 transition-colors">
-            <textarea
-              v-model="mobileContent"
-              v-bind="mobileContentAttrs"
-              :disabled="isMobilePosting"
-              placeholder="今何してる？"
-              class="w-full h-32 p-3 bg-transparent text-white placeholder-gray-400 resize-none outline-none border-none focus:outline-none focus:ring-0"
-            />
-          </div>
-          
-          <!-- 文字数ゲージと情報 -->
-          <div v-if="mobileCurrentLength > 0" class="flex items-center justify-between mb-3">
-            <div class="flex items-center space-x-2">
-              <!-- ドーナツゲージ -->
-              <div class="relative">
-                <svg width="36" height="36" class="transform -rotate-90">
-                  <!-- 背景の円 -->
-                  <circle
-                    cx="18"
-                    cy="18"
-                    :r="mobileRadius"
-                    stroke="#374151"
-                    stroke-width="3"
-                    fill="none"
-                  />
-                  <!-- プログレス円 -->
-                  <circle
-                    cx="18"
-                    cy="18"
-                    :r="mobileRadius"
-                    :stroke="mobileGaugeColor"
-                    stroke-width="3"
-                    fill="none"
-                    stroke-linecap="round"
-                    :stroke-dasharray="mobileStrokeDasharray"
-                    :stroke-dashoffset="0"
-                    class="transition-all duration-300"
-                  />
-                </svg>
-              </div>
-              
-              <!-- 文字数表示 -->
-              <span 
-                v-if="mobileIsNearLimit || mobileIsOverLimit"
-                :class="{
-                  'text-yellow-500': mobileIsNearLimit && !mobileIsOverLimit,
-                  'text-red-500': mobileIsOverLimit
-                }"
-                class="text-sm font-medium"
-              >
-                {{ mobileRemainingChars }}
-              </span>
-            </div>
-          </div>
-          
-          <!-- エラーメッセージ -->
-          <div class="h-6 mb-2">
-            <p v-if="mobileErrors.mobileContent" class="text-red-500 text-sm">{{ mobileErrors.mobileContent }}</p>
-          </div>
-          
-          <div class="flex justify-end">
-            <button
-              type="submit"
-              :disabled="isMobilePosting || mobileIsOverLimit"
-              class="bg-purple-gradient hover:opacity-90 disabled:bg-gray-600 disabled:opacity-50 text-white py-2 px-6 rounded-full font-medium transition-all"
-              :class="{ 'opacity-50': mobileIsOverLimit && !isMobilePosting }"
-            >
-              {{ isMobilePosting ? '投稿中...' : 'シェアする' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <MobilePostModal
+      :show="showMobileModal"
+      v-model:post-body="sharedPostBody"
+      :is-posting="isMobilePosting"
+      @close="showMobileModal = false"
+      @submit="createMobilePost"
+    />
 
     <ToastContainer />
   </div>

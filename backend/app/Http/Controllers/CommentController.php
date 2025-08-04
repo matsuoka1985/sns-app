@@ -39,7 +39,7 @@ class CommentController extends Controller
             $commentsData = $comments->map(function ($comment) {
                 return [
                     'id' => $comment->id,
-                    'content' => $comment->body,
+                    'body' => $comment->body,
                     'user' => [
                         'id' => $comment->user->id,
                         'name' => $comment->user->name,
@@ -119,17 +119,17 @@ class CommentController extends Controller
 
             // バリデーション
             $validated = $request->validate([
-                'content' => 'required|string|max:120',
+                'body' => 'required|string|max:120',
             ], [
-                'content.required' => 'コメント内容は必須です',
-                'content.max' => 'コメントは120文字以内で入力してください',
+                'body.required' => 'コメント内容は必須です',
+                'body.max' => 'コメントは120文字以内で入力してください',
             ]);
 
             // コメント作成
             $comment = Comment::create([
                 'post_id' => $postId,
                 'user_id' => $user->id,
-                'body' => $validated['content'],
+                'body' => $validated['body'],
             ]);
 
             // 作成したコメントを完全な形で取得
@@ -141,7 +141,7 @@ class CommentController extends Controller
                 'message' => 'コメントを投稿しました',
                 'comment' => [
                     'id' => $createdComment->id,
-                    'content' => $createdComment->body,
+                    'body' => $createdComment->body,
                     'user' => [
                         'id' => $createdComment->user->id,
                         'name' => $createdComment->user->name,

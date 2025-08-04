@@ -132,13 +132,16 @@ class PostController extends Controller
 
             // バリデーション
             $validated = $request->validate([
-                'content' => 'required|string|max:120',
+                'body' => 'required|string|max:120',
+            ], [
+                'body.required' => '投稿内容は必須です',
+                'body.max' => '投稿は120文字以内で入力してください',
             ]);
 
             // 投稿作成
             $post = Post::create([
                 'user_id' => $user->id,
-                'body' => $validated['content'],
+                'body' => $validated['body'],
             ]);
 
             \Log::info('投稿作成成功', [
@@ -429,4 +432,5 @@ class PostController extends Controller
             ], 500);
         }
     }
+
 }
