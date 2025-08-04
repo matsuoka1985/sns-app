@@ -12,7 +12,7 @@ defineProps<Props>()
   <div>
     <!-- 無限スクロール用ローディング -->
     <div v-if="isLoading" class="text-center py-8">
-      <LoadingSpinner />
+      <LoadingSpinner size="md" />
       <p class="text-gray-400 text-sm mt-2">読み込み中...</p>
     </div>
 
