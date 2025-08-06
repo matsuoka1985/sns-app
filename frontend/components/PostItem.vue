@@ -1,17 +1,5 @@
 <script setup lang="ts">
-interface User {
-  id: number
-  name: string
-}
-
-interface Post {
-  id: number
-  body: string
-  user: User
-  likes_count: number
-  created_at: string
-  is_liked: boolean
-}
+import type { User, Post } from '~/types'
 
 interface Props {
   post: Post
@@ -45,7 +33,7 @@ const handleDelete = () => {
 </script>
 
 <template>
-  <article class="border-b border-white" :class="padding">
+  <article class="border-l border-b border-white" :class="padding">
     <div class="flex items-center space-x-3 mb-2">
       <h3 class="text-white font-bold">{{ post.user.name }}</h3>
 

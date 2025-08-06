@@ -1,12 +1,11 @@
-/** @type {import('tailwindcss').Config} */
-module.exports = {
+export default {
   content: [
     "./components/**/*.{js,vue,ts}",
-    "./layouts/**/*.vue", 
+    "./layouts/**/*.vue",
     "./pages/**/*.vue",
     "./plugins/**/*.{js,ts}",
-    "./app.vue",
-    "./error.vue"
+    "./nuxt.config.{js,ts}",
+    "./app.vue"
   ],
   theme: {
     extend: {
@@ -19,7 +18,5 @@ module.exports = {
       }
     },
   },
-  plugins: [
-    require('@tailwindcss/forms'),
-  ],
+  plugins: [],
 }

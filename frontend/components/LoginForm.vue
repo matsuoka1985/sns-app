@@ -96,49 +96,39 @@ const onSubmit = handleSubmit(async (values) => {
 </script>
 
 <template>
-  <div class="bg-white rounded-lg shadow-lg p-8">
-    <h2 class="text-center text-xl font-bold text-gray-900 mb-8">
-      ログイン
-    </h2>
+  <FormContainer title="ログイン" @submit="onSubmit">
+    <!-- BaseInput: 共通入力コンポーネント。v-model は modelValue / update:modelValue を内部で扱う -->
+    <!-- メールアドレス -->
+    <BaseInput
+      name="email"
+      type="email"
+      placeholder="メールアドレス"
+      v-model="email"
+      :error-message="errors.email"
+    />
 
-    <!-- @submit で onSubmit を呼び出し、v-model で双方向バインディング -->
-    <form @submit="onSubmit" class="space-y-5">
-      <!-- BaseInput: 共通入力コンポーネント。v-model は modelValue / update:modelValue を内部で扱う -->
-      <!-- メールアドレス -->
-      <BaseInput
-        name="email"
-        type="email"
-        placeholder="メールアドレス"
-        v-model="email"
-        :error-message="errors.email"
-      />
+    <!-- パスワード -->
+    <BaseInput
+      name="password"
+      type="password"
+      placeholder="パスワード"
+      v-model="password"
+      :error-message="errors.password"
+      :minlength="6"
+    />
 
-      <!-- パスワード -->
-      <BaseInput
-        name="password"
-        type="password"
-        placeholder="パスワード"
-        v-model="password"
-        :error-message="errors.password"
-        :minlength="6"
-      />
+    <!-- エラーメッセージ -->
+    <FormErrorMessage :message="errorMessage" />
 
-      <!-- エラーメッセージ -->
-      <div v-if="errorMessage" class="text-red-500 text-sm text-center px-4">
-        {{ errorMessage }}
-      </div>
-
-      <!-- ログインボタン -->
-      <div class="pt-4 flex justify-center">
-        <!-- BaseButton はスロットでラベル、loading prop でスピナー制御 -->
-        <BaseButton
-          type="submit"
-          :loading="isLoading"
-          loading-text="ログイン中..."
-        >
-          ログイン
-        </BaseButton>
-      </div>
-    </form>
-  </div>
+    <template #button>
+      <!-- BaseButton はスロットでラベル、loading prop でスピナー制御 -->
+      <BaseButton
+        type="submit"
+        :loading="isLoading"
+        loading-text="ログイン中..."
+      >
+        ログイン
+      </BaseButton>
+    </template>
+  </FormContainer>
 </template>

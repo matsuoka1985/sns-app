@@ -12,18 +12,8 @@ const emit = defineEmits<{
   updateBody: [body: string]
 }>()
 
-// ログアウト処理
-async function handleLogout() {
-  try {
-    await $fetch('/api/auth/logout', {
-      method: 'POST'
-    })
-  } catch (error) {
-    console.error('ログアウトエラー:', error)
-    // エラーが発生してもログイン画面に遷移
-  }
-  await navigateTo('/login')
-}
+// 認証機能
+const { handleLogout } = useAuth()
 
 // PostFormから投稿イベントを受け取る
 const handleNewPost = (post: any) => {

@@ -43,11 +43,26 @@ export const useAuth = () => {
     return false
   }
 
+  // ログアウト処理
+  const handleLogout = async () => {
+    try {
+      await $fetch('/api/auth/logout', {
+        method: 'POST'
+      })
+      await navigateTo('/login')
+    } catch (error) {
+      console.error('ログアウトエラー:', error)
+      // エラーが発生してもログイン画面に遷移
+      await navigateTo('/login')
+    }
+  }
+
   return {
     user: readonly(user),
     loading: readonly(loading),
     checkAuthState,
     redirectIfAuthenticated,
-    redirectIfNotAuthenticated
+    redirectIfNotAuthenticated,
+    handleLogout
   }
 }
