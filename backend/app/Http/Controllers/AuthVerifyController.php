@@ -2,82 +2,51 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\TokenVerifyRequest;
+use App\Services\AuthVerifyService;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
-use Kreait\Firebase\Factory;
-use Kreait\Firebase\Auth;
+use Illuminate\Support\Facades\Log;
 use Exception;
 
 class AuthVerifyController extends Controller
 {
-    private Auth $firebaseAuth;
+    private $authVerifyService;
 
-    public function __construct()
+    public function __construct(AuthVerifyService $authVerifyService)
     {
-        // Firebase Admin SDK の初期化
-        $factory = (new Factory)->withServiceAccount(config('firebase.credentials.file'));
-        $this->firebaseAuth = $factory->createAuth();
+        $this->authVerifyService = $authVerifyService;
     }
 
-    /**
-     * Firebase IDトークンを検証してHTTP-Only Cookieを設定
-     */
-    public function verifyAndSetCookie(Request $request)
+    public function verifyAndSetCookie(TokenVerifyRequest $request)
     {
         try {
-            $idToken = $request->input('idToken');
+            $result = $this->authVerifyService->verifyToken($request->idToken);
             
-            if (empty($idToken)) {
-                return response()->json([
-                    'success' => false,
-                    'error' => 'IDトークンが提供されていません'
-                ], 400);
-            }
-
-            // Firebase Admin SDK でトークンを検証
-            $verifiedIdToken = $this->firebaseAuth->verifyIdToken($idToken);
-            $firebaseUid = $verifiedIdToken->claims()->get('sub');
-            $email = $verifiedIdToken->claims()->get('email');
-            
-            \Log::info('🔥 Firebase Admin SDK 検証成功', [
-                'uid' => $firebaseUid,
-                'email' => $email,
-                'exp' => $verifiedIdToken->claims()->get('exp')
-            ]);
-
-            \Log::info('Firebase Admin SDK 検証成功', [
-                'firebase_uid' => $firebaseUid,
-                'firebase_email' => $email,
-                'jwt_exp' => $verifiedIdToken->claims()->get('exp')
-            ]);
-
-            // HTTP-Only Cookie を設定（JWT本体）
             $response = response()->json([
                 'success' => true,
                 'message' => '認証成功',
                 'user' => [
-                    'uid' => $firebaseUid,
-                    'email' => $email
+                    'uid' => $result['uid'],
+                    'email' => $result['email']
                 ]
             ]);
 
-            // JWTをHTTP-Onlyで設定（ステートレス）
             return $response->withCookie(cookie(
-                'auth_jwt', // Cookie名
-                $idToken, // JWT本体
-                60 * 24 * 7, // 7日間（分単位）
-                '/', // パス
-                'localhost', // ドメイン
-                false, // HTTPS必須（開発環境はfalse）
-                true, // HTTP-Only（JavaScriptからアクセス不可）
-                false, // Raw
-                'lax' // SameSite
+                'auth_jwt',
+                $result['token'],
+                60 * 24 * 7,
+                '/',
+                'localhost',
+                false,
+                true,
+                false,
+                'lax'
             ));
 
         } catch (Exception $e) {
-            \Log::error('Firebase Admin SDK 検証エラー', [
+            Log::error('Firebase Admin SDK 検証エラー', [
                 'error' => $e->getMessage(),
-                'token' => substr($idToken ?? '', 0, 50) . '...'
+                'token' => substr($request->idToken ?? '', 0, 50) . '...'
             ]);
 
             return response()->json([
@@ -87,16 +56,12 @@ class AuthVerifyController extends Controller
         }
     }
 
-    /**
-     * 現在の認証状態を確認（ステートレス JWT 検証）
-     */
     public function checkAuth(Request $request)
     {
         try {
-            // JWTをCookieから取得
             $jwt = $request->cookie('auth_jwt');
             
-            \Log::info('認証チェック開始', [
+            Log::info('認証チェック開始', [
                 'jwt_exists' => !empty($jwt),
                 'all_cookies' => array_keys($request->cookies->all())
             ]);
@@ -108,29 +73,19 @@ class AuthVerifyController extends Controller
                 ]);
             }
 
-            // Firebase Admin SDK でJWT検証（ステートレス）
-            $verifiedIdToken = $this->firebaseAuth->verifyIdToken($jwt);
-            $firebaseUid = $verifiedIdToken->claims()->get('sub');
-            $firebaseEmail = $verifiedIdToken->claims()->get('email');
-            $expiry = $verifiedIdToken->claims()->get('exp');
-
-            \Log::info('JWT検証成功', [
-                'firebase_uid' => $firebaseUid,
-                'firebase_email' => $firebaseEmail,
-                'jwt_exp' => $expiry->format('Y-m-d H:i:s')
-            ]);
+            $result = $this->authVerifyService->checkAuth($jwt);
 
             return response()->json([
                 'authenticated' => true,
                 'user' => [
-                    'uid' => $firebaseUid,
-                    'email' => $firebaseEmail,
-                    'expires_at' => $expiry->format('Y-m-d H:i:s')
+                    'uid' => $result['uid'],
+                    'email' => $result['email'],
+                    'expires_at' => $result['expires_at']
                 ]
             ]);
 
         } catch (Exception $e) {
-            \Log::error('JWT認証チェックエラー', ['error' => $e->getMessage()]);
+            Log::error('JWT認証チェックエラー', ['error' => $e->getMessage()]);
             
             return response()->json([
                 'authenticated' => false,
@@ -139,15 +94,80 @@ class AuthVerifyController extends Controller
         }
     }
 
-    /**
-     * ログアウト（JWT Cookie削除）
-     */
+    public function checkToken(Request $request)
+    {
+        try {
+            $idToken = $request->bearerToken();
+            
+            if (!$idToken) {
+                return response()->json(['error' => 'No token provided'], 400);
+            }
+
+            $result = $this->authVerifyService->checkBearerToken($idToken);
+
+            return response()->json([
+                'uid' => $result['uid'],
+                'message' => $result['message'],
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('check-token failed: ' . $e->getMessage(), ['exception' => $e]);
+            
+            return response()->json([
+                'error' => 'Invalid token',
+                'message' => $e->getMessage(),
+            ], 401);
+        }
+    }
+
+    public function firebaseLogin(Request $request)
+    {
+        try {
+            $idToken = $request->bearerToken();
+            
+            if (!$idToken) {
+                return response()->json(['message' => 'Missing token'], 400);
+            }
+
+            $result = $this->authVerifyService->firebaseLogin($idToken);
+
+            return response()->json([
+                'success' => $result['success'],
+                'new_user' => $result['new_user'],
+                'user' => $result['user'],
+            ])->cookie(
+                'auth_jwt',
+                $result['token'],
+                60 * 24,
+                '/',
+                null,
+                false,
+                true,
+                false,
+                'lax'
+            );
+
+        } catch (Exception $e) {
+            Log::error('firebase-login failed: ' . $e->getMessage(), ['exception' => $e]);
+            
+            if ($e->getMessage() === 'Firebase user has no email; cannot sync with current schema') {
+                return response()->json([
+                    'message' => $e->getMessage()
+                ], 422);
+            }
+            
+            return response()->json([
+                'message' => 'Invalid token',
+                'error'   => $e->getMessage(),
+            ], 401);
+        }
+    }
+
     public function logout(Request $request)
     {
         try {
-            \Log::info('ログアウト実行');
+            Log::info('ログアウト実行');
 
-            // HTTP-Only JWT Cookieを削除
             $response = response()->json([
                 'success' => true,
                 'message' => 'ログアウトしました'
@@ -166,7 +186,7 @@ class AuthVerifyController extends Controller
             ));
 
         } catch (Exception $e) {
-            \Log::error('ログアウトエラー', ['error' => $e->getMessage()]);
+            Log::error('ログアウトエラー', ['error' => $e->getMessage()]);
             
             return response()->json([
                 'success' => false,

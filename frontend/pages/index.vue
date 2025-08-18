@@ -1,177 +1,238 @@
 <script setup lang="ts">
 
-// 認証必須ページ
+// 認証必須ページの設定 - 未認証時はログインページにリダイレクト
 definePageMeta({
   middleware: 'require-auth'
-})
+});
 
-import type { User, Post } from '~/types'
+import type { User, Post, PostsListResponse, PostsListComponent } from '~/types';
 
-// 投稿一覧データ
-const posts = ref<Post[]>([])
-const isInitialLoading = ref(true)
-const currentUserId = ref<number | null>(null)
+// === 環境別API URL設定 ===
+/**
+ * SSR時とクライアント時で異なるAPI URLを使い分け
+ * - SSR: Dockerコンテナ間通信用URL
+ * - クライアント: ブラウザから外部APIへのアクセス用URL
+ */
+const config = useRuntimeConfig();
+const getApiBaseUrl = () => {
+  // import.meta.server でSSRかクライアントかを判定
+  if (import.meta.server) {
+    return config.apiBaseUrlServer;// SSR用：http://nginx など
+  } else {
+    return config.public.apiBaseUrl; // クライアント用：http://localhost など
+  }
+};
 
-// 無限スクロール
-const { isLoading, hasMore, handleScroll, loadNextPage, reset } = useInfiniteScroll()
+const posts = ref<Post[]>([]); // 投稿一覧データ
+const isInitialLoading = ref(true); // 初回ローディング状態
+const currentUserId = ref<number | null>(null); // 認証中ユーザーのID
 
-// トースト機能
-const { error: showErrorToast, success: showSuccessToast } = useToast()
+// === 無限スクロール機能 ===
+const { isLoading, hasMore, handleScroll, loadNextPage, reset } = useInfiniteScroll();
 
-// 投稿一覧を取得（ページネーション対応）
+// === トースト通知機能 ===
+const { error: showErrorToast, success: showSuccessToast } = useToast();
+
+// === 投稿一覧取得関数（ページネーション対応） ===
 const fetchPosts = async (page: number = 1) => {
   try {
-    const response = await $fetch(`http://localhost/api/posts?page=${page}&per_page=20`, {
-      method: 'GET',
+    // $fetch: （認証Cookie自動送信）
+    const response = await $fetch<PostsListResponse>(`${getApiBaseUrl()}/api/posts?page=${page}&per_page=20`, {
+      // method: 'GET' デフォルトでGETなので省略可能。記述すると型エラーとなる。
       headers: {
         'Accept': 'application/json'
       },
-      credentials: 'include'
-    })
+      credentials: 'include' // Cookieを送信
+    });
+
+    if (!response || typeof response !== 'object') {
+      console.error(' 投稿一覧取得: レスポンスが無効');
+      console.error(' レスポンス詳細:', {
+        response,
+        type: typeof response,
+        isNull: response === null
+      });
+      throw new Error('サーバーからの応答が無効です');
+    }
+
+    // 'success' プロパティの存在確認（in演算子でプロパティ存在チェック）
+    if (!('success' in response)) {
+      console.error(' 投稿一覧取得: レスポンスにsuccessプロパティが存在しない');
+      console.error(' 利用可能プロパティ:', Object.keys(response));
+      throw new Error('サーバーからの応答形式が無効です');
+    }
 
     if (response.success) {
-      currentUserId.value = response.current_user_id
-      console.log(`✅ 投稿一覧取得成功 (ページ${page}):`, response.posts)
+      // 成功レスポンスの必須プロパティ検証
+      if (!('posts' in response)) {
+        console.error(' 成功レスポンスにpostsプロパティが存在しない');
+        console.error(' 利用可能プロパティ:', Object.keys(response));
+        throw new Error('投稿データが取得できませんでした');
+      }
+
+      if (!('current_user_id' in response)) {
+        console.error(' 成功レスポンスにcurrent_user_idプロパティが存在しない');
+        console.error(' 利用可能プロパティ:', Object.keys(response));
+        throw new Error('ユーザー情報が取得できませんでした');
+      }
+
+      if (!('pagination' in response)) {
+        console.error(' 成功レスポンスにpaginationプロパティが存在しない');
+        console.error(' 利用可能プロパティ:', Object.keys(response));
+        throw new Error('ページネーション情報が取得できませんでした');
+      }
+
+      currentUserId.value = response.current_user_id;
+      console.log(` 投稿一覧取得成功 (ページ${page}):`, response.posts);
 
       return {
         data: response.posts,
         pagination: response.pagination
-      }
+      };
     } else {
-      console.error('❌ 投稿一覧取得失敗:', response.error)
-      throw new Error(response.error)
+      // HTTPステータス200だがAPIレベルでエラーの場合
+      console.error(' 投稿一覧取得失敗:', response);
+
+      // 条件演算子（三項演算子）とAND演算子でエラーメッセージを型安全に取得
+      const errorMessage = ('error' in response && typeof response.error === 'string')
+        ? response.error
+        : '投稿一覧の取得に失敗しました';
+
+      throw new Error(errorMessage);
     }
 
   } catch (error) {
-    console.error('投稿一覧取得エラー:', error)
-    throw error
+    console.error('投稿一覧取得エラー:', error);
+    throw error;
   }
 }
 
-// 初期データを読み込み
+// === 初期データ読み込み ===
 const loadInitialPosts = async () => {
   try {
-    isInitialLoading.value = true
-    reset() // 無限スクロール状態をリセット
+    isInitialLoading.value = true;
+    reset(); // 無限スクロール状態をリセット
 
-    const result = await fetchPosts(1)
-    posts.value = result.data
+    const result = await fetchPosts(1); // 1ページ目を取得
+    posts.value = result.data;
   } catch (error) {
-    console.error('初期投稿読み込みエラー:', error)
+    console.error('初期投稿読み込みエラー:', error);
   } finally {
-    isInitialLoading.value = false
+    // try/catch問わず必ず実行される
+    isInitialLoading.value = false;
   }
 }
 
-// 次のページを読み込み
+// === 追加データ読み込み（無限スクロール用） ===
 const loadMore = async () => {
   try {
-    const result = await loadNextPage(fetchPosts)
-    posts.value.push(...result.data)
+    // loadNextPage: useInfiniteScrollのComposable関数
+    const result = await loadNextPage(fetchPosts);
+    // スプレッド演算子で既存配列に追加データを結合
+    posts.value.push(...result.data);
   } catch (error) {
-    console.error('追加投稿読み込みエラー:', error)
+    console.error('追加投稿読み込みエラー:', error);
   }
 }
 
 
-// いいね機能
-const { likingPosts, handleLike, cleanup: cleanupLike } = useLike()
+// === 各種Composable機能の取得 ===
+// 分割代入でComposableから必要な機能のみ抽出
+const { likingPosts, handleLike, cleanup: cleanupLike } = useLike();
+const { handleLogout } = useAuth();
+const { handlePostDeletedInList } = usePostActions();
+const { createMobilePostForList } = useMobilePost();
 
-// 認証機能
-const { handleLogout } = useAuth()
-
-// 投稿アクション機能
-const { handlePostDeletedInList } = usePostActions()
-
-// モバイル投稿機能
-const { createMobilePostForList } = useMobilePost()
-
-// いいねハンドラー（投稿一覧用）
+// === イベントハンドラー関数 ===
+// いいね処理：IDから投稿オブジェクトを検索してComposableに渡す
 const handlePostLike = (postId: number) => {
-  const post = posts.value.find(p => p.id === postId)
-  handleLike(post, posts)
-}
+  // Array.find()で該当投稿を検索
+  const post = posts.value.find(p => p.id === postId);
+  handleLike(post || null, posts); // undefinedをnullに変換してComposableに渡す
+};
 
-// 投稿削除ハンドラー（一覧用）
+// 削除処理：投稿IDを指定してリストから削除（楽観的更新）
 const handlePostDeleted = (postId: number) => {
-  handlePostDeletedInList(postId, posts)
-}
+  handlePostDeletedInList(postId, posts);
+};
 
-// 新しい投稿を追加するハンドラー
+// 新規投稿追加：配列の先頭に新しい投稿を挿入
 const handleNewPost = (newPost: Post) => {
-  posts.value.unshift(newPost)
-}
+  posts.value.unshift(newPost); // unshift()で配列の先頭に追加
+};
 
-// 子コンポーネントで使える関数をprovide
-provide('addNewPost', handleNewPost)
+// === 無限スクロール用クリーンアップ関数 ===
+// 型注釈：関数またはnullを格納する変数
+let cleanup: (() => void) | null = null;
 
-// クリーンアップ関数を格納する変数
-let cleanup: (() => void) | null = null
-
-// ページ読み込み時に投稿一覧を取得とスクロールイベント設定
+// === ライフサイクル：マウント時処理 ===
 onMounted(async () => {
-  await loadInitialPosts()
+  // 初期データ読み込み
+  await loadInitialPosts();
 
-  // スクロールイベントを設定
+  // DOM更新完了後にスクロールイベント設定
   nextTick(() => {
+    // オプショナルチェーン（?.）でDOM参照の安全なアクセス
     if (desktopScrollRef.value?.scrollRef) {
-      cleanup = handleScroll(loadMore, desktopScrollRef.value.scrollRef)
-      console.log('🔄 Infinite scroll setup completed for element:', desktopScrollRef.value.scrollRef)
+      // 無限スクロールのイベントリスナー設定
+      cleanup = handleScroll(loadMore, desktopScrollRef.value.scrollRef);
+      console.log(' Infinite scroll setup completed for element:', desktopScrollRef.value.scrollRef);
     } else {
-      console.warn('⚠️ desktopScrollRef not found, infinite scroll not set up')
+      console.warn(' desktopScrollRef not found, infinite scroll not set up');
     }
-  })
-})
+  });
+});
 
-// クリーンアップ処理
+// === ライフサイクル：アンマウント時処理 ===
 onUnmounted(() => {
-  if (cleanup) cleanup()
+  // 無限スクロールのイベントリスナー削除（メモリリーク防止）
+  if (cleanup) cleanup();
 
-  // いいね機能のクリーンアップ
-  cleanupLike()
-})
+  cleanupLike();   // いいね機能のクリーンアップ
 
-// ページタイトル設定
+});
+
+// === SEO・メタデータ設定 ===
 useHead({
   title: 'ホーム - SHARE'
-})
+});
 
-// ヘッダーの高さを動的に取得して投稿一覧の高さを計算
-const headerRef = ref<HTMLElement | null>(null)
-const postsListHeight = ref('auto')
+// === DOM参照用のref ===
+const headerRef = ref<HTMLElement | null>(null); // ヘッダー要素の参照
+const postsListHeight = ref('auto'); // 投稿一覧の動的高さ
 
+// 高さ計算関数（現在は Flexbox で自動計算）
 const updatePostsListHeight = () => {
-  // Flexboxで自動的にサイズが決まるため、固定の高さ設定は不要
-  console.log('📏 Using flexbox auto height calculation')
-}
+  console.log(' Using flexbox auto height calculation');
+};
 
-// ref要素
-const desktopScrollRef = ref<InstanceType<typeof PostsList> | null>(null)
+// PostsList コンポーネントへの参照（無限スクロール用）
+const desktopScrollRef = ref<PostsListComponent | null>(null);
 
-// 共有投稿状態（デスクトップとモバイル同期）
-const sharedPostBody = ref('')
+// === 共有状態管理 ===
+const sharedPostBody = ref(''); // デスクトップとモバイルで共有する投稿テキスト
 
-// モバイル投稿モーダル用の状態
-const showMobileModal = ref(false)
-const isMobilePosting = ref(false)
+// === モバイルモーダル状態 ===
+const showMobileModal = ref(false); // モーダル表示/非表示
+const isMobilePosting = ref(false); // 投稿処理中フラグ
 
-
-// モバイル投稿処理
+// === モバイル投稿処理 ===
 const createMobilePost = async () => {
-  isMobilePosting.value = true
+  isMobilePosting.value = true; // 処理中フラグを立てる
 
+  // Composableの関数を呼び出し（コールバック関数を渡す）
   const success = await createMobilePostForList(
-    sharedPostBody.value,
-    (newPost) => {
-      handleNewPost(newPost)
-      sharedPostBody.value = ''
-      showMobileModal.value = false
+    sharedPostBody.value, // 投稿内容
+    (newPost) => { // 成功時コールバック
+      handleNewPost(newPost); // 新投稿を一覧に追加
+      sharedPostBody.value = ''; // 入力内容クリア
+      showMobileModal.value = false; // モーダル閉じる
     },
-    () => {
-      isMobilePosting.value = false
+    () => { // 完了時コールバック（成功/失敗問わず）
+      isMobilePosting.value = false; // 処理中フラグをリセット
     }
-  )
-}
+  );
+};
 
 </script>
 
@@ -181,9 +242,8 @@ const createMobilePost = async () => {
       <!-- サイドバー（デスクトップのみ） -->
       <DesktopSidebar
         class="hidden md:block"
-        :post-body="sharedPostBody"
+        v-model:post-body="sharedPostBody"
         @new-post="handleNewPost"
-        @update-body="(body) => sharedPostBody = body"
       />
 
       <!-- メインコンテンツ -->

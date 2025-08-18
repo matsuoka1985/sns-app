@@ -1,24 +1,33 @@
 <script setup lang="ts">
-// ゲスト専用ページ - ログイン済みの場合はリダイレクト
+
+// === ページ設定 ===
+// ゲスト専用ミドルウェア - 認証済みユーザーは自動でホームにリダイレクト
 definePageMeta({
   middleware: 'guest-only'
-})
+});
 
-// ログイン成功時のハンドラー
+// === イベントハンドラー ===
+// ログイン成功時の処理：ホーム画面への遷移
 const handleLoginSuccess = async () => {
-  // ログイン成功 - ホーム画面にリダイレクト
-  await navigateTo('/')
-}
+  // navigateTo: Nuxt標準のページ遷移関数（Vue Routerの push() に相当）
+  await navigateTo('/');
+};
 
-// ページタイトル設定
+// === SEO・メタデータ設定 ===
 useHead({
   title: 'ログイン - SHARE'
-})
+});
+
 </script>
 
 <template>
+  <!-- 認証画面専用のレイアウトコンポーネント -->
   <AuthLayout>
-    <!-- ログインフォーム -->
+    <!--
+      LoginForm コンポーネント
+      @success: カスタムイベントリスナー（ログイン成功時に発火）
+      子コンポーネント → 親コンポーネントへの通信パターン
+    -->
     <LoginForm @success="handleLoginSuccess" />
   </AuthLayout>
 </template>

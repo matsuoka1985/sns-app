@@ -1,6 +1,4 @@
-<script setup>
-        // ヘッダーコンポーネントのロジックが必要な場合はここに追加
-</script>
+
 <template>
   <header class="px-6 py-4 bg-custom-dark">
     <div class="max-w-7xl mx-auto">
@@ -28,7 +26,7 @@
         <div class="flex justify-center mb-4">
           <img src="/images/logo.png" alt="SHARE" class="h-8 w-auto" />
         </div>
-        
+
         <!-- ナビゲーションボタン -->
         <nav class="flex justify-between space-x-4">
           <NuxtLink to="/register" class="flex-1 text-center text-white hover:text-gray-300 transition-colors duration-200 text-lg font-normal py-2">

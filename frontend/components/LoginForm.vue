@@ -1,98 +1,162 @@
 <script setup lang="ts">
-import { useForm } from 'vee-validate' // vee-validate の Composition API
-import { toTypedSchema } from '@vee-validate/yup' // yup スキーマを型安全に渡すヘルパ
-import * as yup from 'yup' // バリデーション定義用ライブラリ
+import { useForm, useIsFieldTouched } from 'vee-validate';
+import { toTypedSchema } from '@vee-validate/yup';
+import * as yup from 'yup';
+import { CHARACTER_LIMITS, VALIDATION_MESSAGES } from '~/constants/validation';
+import type { LoginResponse } from '~/types';
 
 // emit で親へ成功イベントを送るための型定義
 interface Emits {
   (e: 'success'): void
 }
 
-const emit = defineEmits<Emits>(); // Composition API でイベント定義
+const emit = defineEmits<Emits>();
 
-// useForm: バリデーション＋フォーム状態を一括で管理
-const { errors, defineField, handleSubmit } = useForm({
+// VeeValidateを使用したフォーム管理設定
+const { errors, defineField, handleSubmit, meta, submitCount } = useForm({
   validationSchema: toTypedSchema(
     yup.object({
+      // メールアドレスのバリデーション
       email: yup
         .string()
-        .required('メールアドレスは必須です')
-        .email('正しいメールアドレスを入力してください'),
+        .required(VALIDATION_MESSAGES.EMAIL.REQUIRED)
+        .email(VALIDATION_MESSAGES.EMAIL.INVALID_FORMAT),
+
+      // パスワードのバリデーション
       password: yup
         .string()
-        .required('パスワードは必須です')
-        .min(6, 'パスワードは6文字以上で入力してください')
+        .required(VALIDATION_MESSAGES.PASSWORD.REQUIRED)
+        .min(CHARACTER_LIMITS.PASSWORD_MIN, VALIDATION_MESSAGES.PASSWORD.MIN_LENGTH)
     })
-  )
+  ),
+  validateOnMount: false,
+  keepValuesOnUnmount: true,
+
 });
 
-// フィールド定義
-const [email] = defineField('email');     // v-model 代わりに各フィールドをバインド
-const [password] = defineField('password');
+// フォームフィールド定義
+const [email, emailAttrs] = defineField('email', {
+  validateOnInput: true,
+  validateOnChange: false,
+  validateOnBlur: true,
+  validateOnModelUpdate: false
+});
+
+const [password, passwordAttrs] = defineField('password', {
+  validateOnInput: true,
+  validateOnChange: false,
+  validateOnBlur: true,
+  validateOnModelUpdate: false
+});
+
+// 各フィールドのtouched状態（blur済みか）
+const emailTouched = useIsFieldTouched('email');
+const passwordTouched = useIsFieldTouched('password');
 
 // 状態管理
 const isLoading = ref<boolean>(false); // 送信中フラグ
 const errorMessage = ref<string>('');  // API からのエラー表示用
 
-// handleSubmit: VeeValidate がバリデーション後に values を渡してくれる
+// エラーメッセージの表示制御（blur後 or 送信後のみ表示。入力で即時消える）
+const emailErrorToShow = computed(() => {
+  if (emailTouched.value || submitCount.value > 0) {
+    return errors.value.email || '';
+  }
+  return '';
+});
+
+const passwordErrorToShow = computed(() => {
+  if (passwordTouched.value || submitCount.value > 0) {
+    return errors.value.password || '';
+  }
+  return '';
+});
+
+// 表示対象のエラーがあるか（未検証のエラーは無視）
+const hasShownError = computed(() => {
+  const emailShown = (emailTouched.value || submitCount.value > 0) && !!errors.value.email;
+  const passwordShown = (passwordTouched.value || submitCount.value > 0) && !!errors.value.password;
+  return emailShown || passwordShown;
+});
+
+// 送信可否（バリデエラーまたは送信中で無効化）
+const isSubmitDisabled = computed(() => {
+  if (isLoading.value) {
+    return true;
+  }
+  if (meta.value.pending) {
+    return true; // バリデーション中は押せない
+  }
+  return hasShownError.value;
+});
+
+// 送信処理
 const onSubmit = handleSubmit(async (values) => {
+
   try {
-    isLoading.value = true
-    errorMessage.value = ''
+    isLoading.value = true;
+    errorMessage.value = '';
 
-    // Firebase Authenticationでログイン
-    const { $firebaseAuth } = useNuxtApp() // Nuxt のプラグインインジェクション
-    const auth = $firebaseAuth
+    // === Firebase Authentication処理 ===
+    // NuxtアプリからFirebase Authインスタンスを取得
+    const { $firebaseAuth } = useNuxtApp(); // plugins/firebase.client.ts で初期化されたインスタンス
+    const auth = $firebaseAuth; // Firebase Auth インスタンス（認証サービスの入口）
 
-    const { signInWithEmailAndPassword } = await import('firebase/auth')
+    // Firebase Authentication SDK の動的インポート
+    // 必要な時だけインポートしてバンドルサイズを最適化
+    const { signInWithEmailAndPassword } = await import('firebase/auth');
+
+    // Firebase でメール・パスワード認証を実行
     const userCredential = await signInWithEmailAndPassword(
-      auth,
-      values.email,
-      values.password
-    )
+      auth, // Firebase Auth インスタンス
+      values.email, // フォームから入力されたメールアドレス
+      values.password // フォームから入力されたパスワード
+    );
+    // 戻り値: UserCredential オブジェクト（認証結果 + ユーザー情報）
 
-    const firebaseUser = userCredential.user
+    // Firebase ユーザーオブジェクトを取得
+    const firebaseUser = userCredential.user; // User型（uid, email, displayName等を含む）
 
     // Firebase認証情報をコンソールに表示
-    console.log('🔥 Firebase ログイン成功:', {
+    console.log('Firebase ログイン成功:', {
       uid: firebaseUser.uid,
       email: firebaseUser.email,
       displayName: firebaseUser.displayName
-    })
+    });
 
-    // Firebase IDトークンを取得してコンソールに表示
-    const idToken = await firebaseUser.getIdToken()
-    console.log('🎫 Firebase IDトークン:', idToken)
+    // Firebase IDトークンを取得
+    const idToken = await firebaseUser.getIdToken();
+    console.log('Firebase IDトークン:', idToken);
 
     // Nuxt API routeでHttpOnly Cookieを設定
-    const response = await $fetch('/api/auth/login', {
+    const response = await $fetch<LoginResponse>('/api/auth/login', {
       method: 'POST',
       body: {
         idToken: idToken
       }
-    })
+    });
 
     // APIレスポンスをコンソールに表示
-    console.log('📡 Nuxt API レスポンス:', response)
+    console.log('Nuxt API レスポンス:', response);
 
     if (response.success) {
-      console.log('✅ ログイン成功! HttpOnly Cookie設定完了:', response.user)
+      console.log('ログイン成功! HttpOnly Cookie設定完了:', response.user);
       
       // ログイン成功をemitで親コンポーネントに通知
-      emit('success')
-      
+      emit('success');
+
     } else {
-      console.log('❌ ログイン失敗:', response.error)
-      errorMessage.value = response.error || 'ログインに失敗しました'
+      console.log('ログイン失敗:', response.error);
+      errorMessage.value = response.error || 'ログインに失敗しました';
+      isLoading.value = false;
     }
 
-  } catch (error: any) {
-    console.error('Login error:', error)
-    errorMessage.value = 'メールアドレスまたはパスワードが正しくありません'
-  } finally {
-    isLoading.value = false
+  } catch (error) {
+    console.error('Login error:', error);
+    errorMessage.value = 'メールアドレスまたはパスワードが正しくありません';
+    isLoading.value = false;
   }
-})
+});
 </script>
 
 <template>
@@ -104,7 +168,8 @@ const onSubmit = handleSubmit(async (values) => {
       type="email"
       placeholder="メールアドレス"
       v-model="email"
-      :error-message="errors.email"
+      v-bind="emailAttrs"
+      :error-message="emailErrorToShow"
     />
 
     <!-- パスワード -->
@@ -113,7 +178,8 @@ const onSubmit = handleSubmit(async (values) => {
       type="password"
       placeholder="パスワード"
       v-model="password"
-      :error-message="errors.password"
+      v-bind="passwordAttrs"
+      :error-message="passwordErrorToShow"
       :minlength="6"
     />
 
@@ -126,6 +192,7 @@ const onSubmit = handleSubmit(async (values) => {
         type="submit"
         :loading="isLoading"
         loading-text="ログイン中..."
+        :disabled="isSubmitDisabled"
       >
         ログイン
       </BaseButton>

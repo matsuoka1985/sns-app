@@ -1,144 +1,188 @@
 <script setup lang="ts">
 
-// 認証必須ページ
-definePageMeta({
-  middleware: 'require-auth'
-})
+definePageMeta({ middleware: 'require-auth' }); // 認証必須ページ設定
 
-import type { User, Post, Comment } from '~/types'
+import type { User, Post, Comment, PostDetailResponse, CommentsSectionComponent, ErrorWithStatus } from '~/types';
+import { LAYOUT_HEIGHTS } from '~/constants/layout';
 
-// パラメーターから投稿IDを取得
-const route = useRoute()
-const postId = Number(route.params.id)
+const route = useRoute();
+const postId = Number(route.params.id); // URLパラメーターから投稿IDを数値型で取得
 
-// 投稿データ
-const post = ref<Post | null>(null)
-const isPostLoading = ref(true)
-const currentUserId = ref<number | null>(null)
+const post = ref<Post | null>(null); // 表示する投稿データ
+const isPostLoading = ref(true); // 投稿データ取得中の状態
+const currentUserId = ref<number | null>(null); // 現在認証中のユーザーID
 
 
-// トースト機能
-const { error: showErrorToast, success: showSuccessToast } = useToast()
+// const { error: showErrorToast, success: showSuccessToast } = useToast();
 
-// 投稿データを取得
-const fetchPost = async () => {
+const fetchPost = async () => { // 指定IDの投稿詳細をサーバーから取得
   try {
-    const response = await $fetch(`/api/posts/${postId}`)
+    console.log(' 投稿詳細取得開始 - PostID:', postId);
+    const response = await $fetch<PostDetailResponse>(`/api/posts/${postId}`);
+
+    if (!response || typeof response !== 'object') {
+      console.error(' 投稿詳細取得: レスポンスが無効');
+      console.error(' レスポンス詳細:', {
+        response,
+        type: typeof response,
+        isNull: response === null
+      });
+      throw new Error('サーバーからの応答が無効です');
+    }
+
+    if (!('success' in response)) { // 'success'プロパティの存在確認
+      console.error(' 投稿詳細取得: レスポンスにsuccessプロパティが存在しない');
+      console.error(' 利用可能プロパティ:', Object.keys(response));
+      throw new Error('サーバーからの応答形式が無効です');
+    }
 
     if (response.success) {
-      post.value = response.post
-      currentUserId.value = response.current_user_id
-      console.log('✅ 投稿詳細取得成功:', response.post)
+      if (!('post' in response)) { // 投稿データの存在確認
+        console.error('成功レスポンスにpostプロパティが存在しない');
+        console.error(' 利用可能プロパティ:', Object.keys(response));
+        throw new Error('投稿データが取得できませんでした');
+      }
+
+      if (!('current_user_id' in response)) { // 現在ユーザーIDの存在確認
+        console.error(' 成功レスポンスにcurrent_user_idプロパティが存在しない');
+        console.error(' 利用可能プロパティ:', Object.keys(response));
+        throw new Error('ユーザー情報が取得できませんでした');
+      }
+
+      post.value = response.post; // 画面表示用の投稿データ設定
+      currentUserId.value = response.current_user_id; // 権限判定用のユーザーID設定
+      console.log(' 投稿詳細取得成功:', response.post);
+      console.log(' 現在ユーザーID:', response.current_user_id);
     } else {
-      console.error('❌ 投稿詳細取得失敗:', response.error)
-      throw new Error(response.error)
+      console.error(' 投稿詳細取得失敗:', response);
+
+      const errorMessage = ('error' in response && typeof response.error === 'string')
+        ? response.error
+        : '投稿の取得に失敗しました';
+
+      throw new Error(errorMessage);
     }
-  } catch (error) {
-    console.error('投稿詳細取得エラー:', error)
-    if (error.status === 404) {
-      throw createError({ statusCode: 404, statusMessage: '投稿が見つかりません' })
+  } catch (error: unknown) {
+    console.error(' 投稿詳細取得エラー:', error);
+
+    const errorWithStatus = error as ErrorWithStatus;
+    if (errorWithStatus?.status === 404) { // 404エラーの特別処理（Nuxtエラーページ表示）
+      console.log('404エラー検出 - Nuxtエラーページに遷移');
+      throw createError({
+        statusCode: 404,
+        statusMessage: '投稿が見つかりません'
+      });
     }
-    throw error
+
+    throw error; // その他のエラーは上位に委譲
   }
 }
 
 
-// いいね機能
-const { likingPosts, handleLike, cleanup: cleanupLike } = useLike()
+const { likingPosts, handleLike, cleanup: cleanupLike } = useLike();
+// const { handleLogout } = useAuth();
+const { handlePostDeletedInDetail } = usePostActions(); // 詳細ページ削除処理
+const { createMobilePostForDetail } = useMobilePost(); // 詳細ページモバイル投稿
 
-// 認証機能
-const { handleLogout } = useAuth()
-
-// 投稿アクション機能
-const { handlePostDeletedInDetail } = usePostActions()
-
-// モバイル投稿機能
-const { createMobilePostForDetail } = useMobilePost()
-
-// いいねハンドラー（投稿詳細用）
-const handlePostLike = () => {
-  handleLike(post.value)
+const handlePostLike = () => { // いいねボタンクリック処理
+  console.log(' いいねボタンクリック - PostID:', postId);
+  handleLike(post.value);
 }
 
-// 投稿削除ハンドラー（詳細ページ用）
-const handlePostDeleted = () => {
-  if (!post.value) return
-  handlePostDeletedInDetail(postId)
+const handlePostDeleted = () => { // 投稿削除ボタンクリック処理
+  if (!post.value) {
+    console.warn(' 削除処理: 投稿データが存在しません');
+    return
+  }
+  console.log(' 投稿削除ボタンクリック - PostID:', postId);
+  handlePostDeletedInDetail(postId);
 }
 
+const handleNewComment = (newComment: Comment) => { // 新規コメント投稿完了時の処理
+  console.log(' 新しいコメント投稿完了:', newComment.id);
 
-// 新しいコメントを追加するハンドラー
-const handleNewComment = (newComment: Comment) => {
   if (post.value) {
-    post.value.comments_count += 1
+    post.value.comments_count = (post.value.comments_count || 0) + 1
+    console.log(' コメント数更新:', post.value.comments_count);
   }
-  updateCommentsListHeight()
+
+  updateCommentsListHeight(); // レイアウト再計算
 }
 
-// 新しい投稿を処理するハンドラー
-const handleNewPost = (newPost: any) => {
-  sharedPostBody.value = ''
-  // 投稿成功通知はDesktopSidebar内で処理済み
-}
+const handleNewPost = (_newPost: Post) => { // デスクトップ投稿完了時のテキストクリア。_newPostは未使用
+  console.log(' デスクトップ投稿完了 - テキストクリア実行');
+  sharedPostBody.value = '';
+};
 
 
 
-// 動的高さ計算用のref（統合）
-const headerRef = ref<HTMLElement | null>(null)
-const postSectionRef = ref<HTMLElement | null>(null)
-const commentsSectionRef = ref<HTMLElement | null>(null)
-const commentsListHeight = ref('auto')
+const headerRef = ref<HTMLElement | null>(null); // ヘッダー要素参照
+const postSectionRef = ref<HTMLElement | null>(null); // 投稿詳細セクション要素参照
+const commentsSectionRef = ref<HTMLElement | null>(null); // コメントセクション要素参照
+const commentsListHeight = ref('auto'); // 動的計算コメントリスト高さ
 
-// モバイル投稿モーダル用の状態
-const showMobileModal = ref(false)
-const isMobilePosting = ref(false)
+const showMobileModal = ref(false); // モバイル投稿モーダル表示状態
+const isMobilePosting = ref(false); // モバイル投稿処理中フラグ
 
-// デスクトップとモバイルで共有する投稿内容
-const sharedPostBody = ref('')
-
-// デスクトップとモバイルで共有するコメント内容
-const sharedCommentBody = ref('')
+const sharedPostBody = ref(''); // デスクトップ・モバイル共有投稿テキスト
+const commentBody = ref(''); // コメント入力内容（フローティングボタン表示制御用）
 
 
 
-// モバイル投稿処理
-const createMobilePost = async () => {
-  isMobilePosting.value = true
+const createMobilePost = async () => { // モバイル投稿処理・状態管理
+
+  isMobilePosting.value = true;
 
   const success = await createMobilePostForDetail(
     sharedPostBody.value,
     () => {
-      isMobilePosting.value = false
+      console.log('モバイル投稿処理完了 - 処理中フラグをリセット');
+      isMobilePosting.value = false;
     }
-  )
+  );
 
-  if (success) {
-    sharedPostBody.value = ''
-    showMobileModal.value = false
+  if (success) { // 成功時は状態リセット・モーダル閉じる
+    console.log('モバイル投稿成功 - 状態リセット実行');
+    sharedPostBody.value = ''; // 投稿テキストクリア
+    showMobileModal.value = false; // モーダル閉じる
+  } else {
+    console.log(' モバイル投稿失敗 - モーダル継続表示');
   }
 }
 
 
+// コメントリスト表示領域の高さを動的計算（レスポンシブ対応・リサイズ対応）
 const updateCommentsListHeight = () => {
-  nextTick(() => {
-    if (headerRef.value && postSectionRef.value && commentsSectionRef.value) {
-      const headerHeight = headerRef.value?.offsetHeight || 0
-      const postHeight = postSectionRef.value.offsetHeight
-      const screenHeight = window.innerHeight
+  nextTick(() => { // DOM更新後に高さ計算
+    if (headerRef.value && postSectionRef.value && commentsSectionRef.value) { // DOM要素存在確認
+      const headerHeight = headerRef.value?.offsetHeight || 0;
+      const postHeight = postSectionRef.value.offsetHeight;
+      const screenHeight = window.innerHeight;
 
-      // CommentsSection内のヘッダーとフォームの高さを取得
-      const commentsHeaderHeight = commentsSectionRef.value.commentsHeaderRef?.offsetHeight || 88 // デフォルト値
-      const formHeight = commentsSectionRef.value.commentFormRef?.offsetHeight || 168 // デフォルト値
-      // ドーナツゲージとエラーメッセージ領域の高さを追加で考慮
-      const donutGaugeHeight = 56 // ドーナツゲージ32px + エラーメッセージ24px
-      // モバイルの場合はフローティングボタン用余白も考慮
-      const mobileBottomPadding = window.innerWidth < 768 ? 32 : 0
-      const availableHeight = screenHeight - headerHeight - postHeight - commentsHeaderHeight - formHeight - donutGaugeHeight - mobileBottomPadding
-      const finalHeight = Math.max(availableHeight, 200)
-      commentsListHeight.value = `${finalHeight}px`
-      
-      // デバッグログを追加
-      console.log('高さ計算デバッグ:', {
+      console.log(' 基本要素の高さ取得:', {
+        headerHeight,
+        postHeight,
+        screenHeight
+      });
+
+      const commentsHeaderHeight = (commentsSectionRef.value as CommentsSectionComponent)?.commentsHeaderRef?.offsetHeight || LAYOUT_HEIGHTS.COMMENTS_HEADER;
+      const formHeight = (commentsSectionRef.value as CommentsSectionComponent)?.commentFormRef?.offsetHeight || LAYOUT_HEIGHTS.COMMENT_FORM;
+      const donutGaugeHeight = LAYOUT_HEIGHTS.DONUT_GAUGE;
+      const mobileBottomPadding = window.innerWidth < LAYOUT_HEIGHTS.MOBILE_BREAKPOINT ? LAYOUT_HEIGHTS.MOBILE_BOTTOM_PADDING : 0;
+
+      console.log(' 詳細要素の高さ取得:', {
+        commentsHeaderHeight,
+        formHeight,
+        donutGaugeHeight,
+        mobileBottomPadding,
+        isMobile: window.innerWidth < LAYOUT_HEIGHTS.MOBILE_BREAKPOINT
+      });
+
+      const availableHeight = screenHeight - headerHeight - postHeight - commentsHeaderHeight - formHeight - donutGaugeHeight - mobileBottomPadding;
+      const finalHeight = Math.max(availableHeight, LAYOUT_HEIGHTS.MIN_COMMENTS_LIST); // 最小高さ保証
+      commentsListHeight.value = `${finalHeight}px`;
+
+      console.log(' 高さ計算デバッグ:', {
         screenHeight,
         headerHeight,
         postHeight,
@@ -149,48 +193,68 @@ const updateCommentsListHeight = () => {
         availableHeight,
         finalHeight,
         commentsListHeightValue: commentsListHeight.value
-      })
+      });
     } else {
-      console.log('要素が見つからない:', {
+      console.log(' 高さ計算: 要素が見つからない:', {
         headerRef: !!headerRef.value,
         postSectionRef: !!postSectionRef.value,
         commentsSectionRef: !!commentsSectionRef.value
-      })
+      });
     }
   })
 }
 
-// ページ読み込み時の処理
-onMounted(async () => {
+onMounted(async () => { // コンポーネント初期化・データ取得・レイアウト計算
+  console.log(' 投稿詳細ページマウント開始');
+
   try {
-    isPostLoading.value = true
-    await fetchPost()
+    console.log(' 投稿データ取得開始 - ローディング状態セット');
+    isPostLoading.value = true;
+
+    await fetchPost(); // API呼び出しで投稿詳細とユーザーID取得
+    console.log('投稿データ取得完了');
+
   } catch (error) {
-    console.error('ページ読み込みエラー:', error)
+    console.error(' ページ読み込みエラー:', error);
+    const errorWithStatus = error as ErrorWithStatus;
+    console.error(' エラー詳細:', {
+      message: errorWithStatus?.message,
+      status: errorWithStatus?.status,
+      stack: errorWithStatus?.stack
+    });
   } finally {
-    isPostLoading.value = false
-    // ローディング終了後、コンポーネントがマウントされるのを待つ
-    nextTick(() => {
-      updateCommentsListHeight()
+    console.log(' ローディング完了 - UI状態更新');
+    isPostLoading.value = false;
+
+    nextTick(() => { // DOM更新完了後にレイアウト計算実行
+      console.log(' 初期レイアウト計算実行');
+      updateCommentsListHeight();
     })
   }
 
-  // リサイズイベント設定
-  window.addEventListener('resize', updateCommentsListHeight)
+  console.log(' ウィンドウリサイズイベントリスナー設定');
+  window.addEventListener('resize', updateCommentsListHeight) // リサイズ対応
+
+  console.log(' 投稿詳細ページマウント完了');
 })
 
-// クリーンアップ処理
-onUnmounted(() => {
-  window.removeEventListener('resize', updateCommentsListHeight)
+onUnmounted(() => { // リソース解放・メモリリーク防止
 
-  // いいね機能のクリーンアップ
-  cleanupLike()
-})
+  window.removeEventListener('resize', updateCommentsListHeight) // リサイズイベント削除
 
-// ページタイトル設定
-useHead({
-  title: computed(() => post.value ? `${post.value.user.name}の投稿 - SHARE` : '投稿詳細 - SHARE')
-})
+  cleanupLike(); // いいね機能の進行中処理中断・状態クリア
+
+});
+
+useHead({ // SEO・ソーシャル共有対応のメタデータ設定
+  title: computed(() => { // 投稿データ取得後に動的更新
+    if (post.value) {
+      const userName = post.value.user.name;
+      return `${userName}の投稿 - SHARE`;
+    }
+    return '投稿詳細 - SHARE';
+  })
+});
 </script>
 
 <template>
@@ -218,6 +282,7 @@ useHead({
                 v-if="post"
                 :post="post"
                 :current-user-id="currentUserId"
+
                 :is-liking="likingPosts.has(post?.id || 0)"
                 :show-detail-link="false"
                 :is-mobile="false"
@@ -231,13 +296,13 @@ useHead({
               v-if="!isPostLoading"
               ref="commentsSectionRef"
               :post-id="postId"
-              :shared-comment-body="sharedCommentBody"
+              :shared-comment-body="commentBody"
               :comments-list-height="commentsListHeight"
-              @update:shared-comment-body="sharedCommentBody = $event"
+              @update:shared-comment-body="commentBody = $event"
               @comment-created="handleNewComment"
               @mounted="updateCommentsListHeight"
             />
-            
+
             <!-- ローディング時はコメントセクション全体をローディング表示 -->
             <div v-else class="flex-1 flex items-center justify-center">
               <div class="flex flex-col items-center py-16">
@@ -251,10 +316,10 @@ useHead({
     </div>
 
     <!-- フローティング投稿ボタン（モバイルのみ、コメント入力時は非表示） -->
-    <FloatingPostButton 
-      :hide-when-typing="true" 
-      :comment-body="sharedCommentBody" 
-      @click="showMobileModal = true" 
+    <FloatingPostButton
+      :hide-when-typing="true"
+      :comment-body="commentBody"
+      @click="showMobileModal = true"
     />
 
     <!-- モバイル投稿モーダル -->

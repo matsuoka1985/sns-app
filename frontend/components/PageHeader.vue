@@ -3,18 +3,21 @@ interface Props {
   title: string
 }
 
-defineProps<Props>()
+defineProps<Props>();
 
 // 認証機能
-const { handleLogout } = useAuth()
+const { handleLogout } = useAuth();
 
 // ヘッダー要素のref
-const headerRef = ref<HTMLElement | null>(null)
+const headerRef = ref<HTMLElement | null>(null);
 
 // 親コンポーネントからアクセスできるようにexpose
 defineExpose({
-  offsetHeight: computed(() => headerRef.value?.offsetHeight || 0)
-})
+  offsetHeight: computed(() =>{
+    return headerRef.value?.offsetHeight || 0;
+  }
+)
+});
 </script>
 
 <template>

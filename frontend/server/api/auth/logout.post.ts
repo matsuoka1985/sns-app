@@ -9,18 +9,18 @@ export default defineEventHandler(async (event) => {
       path: '/'
     })
 
-    console.log('🔐 [LOGOUT API] HttpOnly Cookie削除完了')
+    console.log(' [LOGOUT API] HttpOnly Cookie削除完了');
 
     return {
       success: true,
       message: 'ログアウトしました'
-    }
+    };
 
   } catch (error) {
-    console.error('🔐 [LOGOUT API] ログアウトエラー:', error)
+    console.error(' [LOGOUT API] ログアウトエラー:', error)
     return {
       success: false,
       error: 'ログアウト処理でエラーが発生しました'
-    }
+    };
   }
-})
+});

@@ -5,7 +5,6 @@
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10m0 0V6a2 2 0 00-2-2H9a2 2 0 00-2 2v2m8 0v10a2 2 0 01-2 2H9a2 2 0 01-2-2V8m8 0V6a2 2 0 00-2-2H9a2 2 0 00-2 2v2"></path>
       </svg>
       <p>まだ投稿がありません</p>
-      <p class="text-sm mt-2">新しい投稿を作成してみましょう！</p>
     </div>
   </div>
 </template>

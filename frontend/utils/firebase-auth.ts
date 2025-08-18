@@ -15,20 +15,20 @@ async function getFirebaseAuth() {
   // 動的インポートでサーバーサイドのみで読み込み
   const { getAuth } = await import('firebase-admin/auth')
   const { initializeApp, getApps } = await import('firebase-admin/app')
-  
+
   // Firebase Admin アプリの初期化（一度だけ）
   let adminApp
   if (getApps().length === 0) {
     const projectId = process.env.FIREBASE_PROJECT_ID || 'sns-app-23ac6'
-    console.log('🔥 [FIREBASE AUTH] Firebase Admin SDK初期化（一度だけ）', { projectId })
-    
+    console.log(' [FIREBASE AUTH] Firebase Admin SDK初期化（一度だけ）', { projectId })
+
     adminApp = initializeApp({
       projectId: projectId,
     })
   } else {
     adminApp = getApps()[0]
   }
-  
+
   _firebaseAuth = getAuth(adminApp)
   return _firebaseAuth
 }
@@ -47,7 +47,7 @@ export async function verifyFirebaseToken(idToken: string) {
     const now = Date.now()
     const cached = jwtCache.get(idToken)
     if (cached && cached.expiry > now) {
-      console.log('🔥 [FIREBASE AUTH] キャッシュヒット（超高速）')
+      console.log(' [FIREBASE AUTH] キャッシュヒット（超高速）')
       return cached.result
     }
 
@@ -61,7 +61,7 @@ export async function verifyFirebaseToken(idToken: string) {
     // Firebase Admin SDKで検証
     const auth = await getFirebaseAuth()
     const decodedToken = await auth.verifyIdToken(idToken)
-    
+
     const result = {
       authenticated: true,
       uid: decodedToken.uid,
@@ -75,10 +75,10 @@ export async function verifyFirebaseToken(idToken: string) {
       expiry: now + CACHE_DURATION
     })
 
-    console.log('🔥 [FIREBASE AUTH] Firebase検証完了（次回キャッシュ利用）')
+    console.log(' [FIREBASE AUTH] Firebase検証完了（次回キャッシュ利用）')
     return result
   } catch (error) {
-    console.error('🔥 [FIREBASE AUTH] JWT検証エラー:', error)
+    console.error(' [FIREBASE AUTH] JWT検証エラー:', error)
     const result = {
       authenticated: false,
       error: error instanceof Error ? error.message : 'JWT検証に失敗しました'

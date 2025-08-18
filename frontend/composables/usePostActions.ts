@@ -1,175 +1,138 @@
-import type { Post } from '~/types'
+import type { Post, DeleteResponse, RestoreResponse } from "~/types";
 
-/**
- * 投稿の削除・復元処理を管理するcomposable
- * 楽観的更新とエラーハンドリングを一元管理
- */
+// 投稿の削除・復元処理（楽観的更新、ロールバック、復元機能付き）
 export const usePostActions = () => {
-  const { error: showErrorToast, success: showSuccessToast } = useToast()
+  const { error: showErrorToast, success: showSuccessToast } = useToast();
 
-  /**
-   * 投稿削除ハンドラー（一覧用 - 楽観的更新対応）
-   * @param postId 削除する投稿ID
-   * @param posts 投稿一覧のref
-   * @returns Promise<void>
-   */
+  // 一覧ページ用削除処理（楽観的更新＋復元機能付き）
   const handlePostDeletedInList = async (postId: number, posts: Ref<Post[]>) => {
-    // 削除確認
-    if (!confirm('この投稿を削除してもよろしいですか？')) {
-      return
+    if (!confirm("この投稿を削除してもよろしいですか？")){ return;}
+
+    const targetIndex = posts.value.findIndex(post => post.id === postId); // 削除対象の位置を特定
+    if (targetIndex === -1) {
+      console.warn("削除対象の投稿が見つかりません:", postId);
+      return;
     }
 
-    // 削除対象の投稿とその位置を保存
-    const targetIndex = posts.value.findIndex(post => post.id === postId)
-    if (targetIndex === -1) return
-
-    const targetPost = posts.value[targetIndex]
-
-    // 楽観的更新：即座にUIから削除
-    posts.value = posts.value.filter(post => post.id !== postId)
-    console.log('🚀 楽観的削除実行:', postId, '元のindex:', targetIndex)
+    const targetPost = posts.value[targetIndex]; // 復元用に投稿データを保存
+    posts.value = posts.value.filter(post => post.id !== postId); // UI上で即座に削除（楽観的更新）
 
     try {
-      // バックグラウンドでAPI呼び出し
-      const response = await $fetch(`/api/posts/${postId}`, {
-        method: 'DELETE'
-      })
+      const response = await $fetch<DeleteResponse>(`/api/posts/${postId}`, {
+        method: "DELETE" // DELETEメソッドで削除API実行
+      });
 
-      if (response.success) {
-        console.log('✅ 投稿削除成功:', response.message)
-        // 成功時は何もしない（既にUIから削除済み）
-        // 復元アクション付きトーストを表示
-        showSuccessToast('投稿を削除しました', 8000, {
-          label: '復元しますか？',
-          action: () => restorePostInList(postId, targetPost, targetIndex, posts)
-        })
+      if (response && typeof response === "object" && "success" in response) { // レスポンス型ガード
+        if (response.success) {
+          showSuccessToast("投稿を削除しました", 8000, { // 8秒間の復元可能期間
+            label: "復元しますか？",
+            action: () => restorePostInList(postId, targetPost, targetIndex, posts)
+          });
+        } else {
+          posts.value.splice(targetIndex, 0, targetPost); // 楽観的更新をロールバック（元の位置に復元）
+          showErrorToast("投稿の削除に失敗しました");
+        }
       } else {
-        console.error('❌ 投稿削除失敗:', response.error)
-        // 失敗時は元の位置に投稿を復元
-        posts.value.splice(targetIndex, 0, targetPost)
-        console.log('🔄 投稿復元完了 (index:', targetIndex, '):', targetPost)
-        showErrorToast('投稿の削除に失敗しました')
+        posts.value.splice(targetIndex, 0, targetPost); // 楽観的更新をロールバック
+        showErrorToast("投稿の削除に失敗しました");
       }
     } catch (error: any) {
-      console.error('投稿削除エラー:', error)
+      posts.value.splice(targetIndex, 0, targetPost); // 楽観的更新をロールバック（必須）
 
-      // エラー時は元の位置に投稿を復元
-      posts.value.splice(targetIndex, 0, targetPost)
-      console.log('🔄 投稿復元完了 (index:', targetIndex, '):', targetPost)
-
-      // エラー種別に応じたメッセージ
       if (error.status === 403) {
-        showErrorToast('他のユーザーの投稿は削除できません')
+        showErrorToast("他のユーザーの投稿は削除できません"); // 権限エラー
       } else if (error.status === 404) {
-        showErrorToast('投稿が見つかりません')
+        showErrorToast("投稿が見つかりません"); // リソース不存在
       } else if (error.status === 401) {
-        showErrorToast('ログインが必要です')
+        showErrorToast("ログインが必要です"); // 認証エラー
       } else {
-        showErrorToast('ネットワークエラーが発生しました')
+        showErrorToast("ネットワークエラーが発生しました"); // その他のエラー
       }
     }
-  }
+  };
 
-  /**
-   * 投稿削除ハンドラー（詳細ページ用）
-   * @param postId 削除する投稿ID
-   * @returns Promise<void>
-   */
+  // 詳細ページ用削除処理（楽観的更新なし、復元機能付き、削除後にトップ遷移）
   const handlePostDeletedInDetail = async (postId: number) => {
-    if (!confirm('この投稿を削除してもよろしいですか？')) {
-      return
-    }
+    if (!confirm("この投稿を削除してもよろしいですか？")) {return;}
 
     try {
-      const response = await $fetch(`/api/posts/${postId}`, {
-        method: 'DELETE'
-      })
+      const response = await $fetch<DeleteResponse>(`/api/posts/${postId}`, {
+        method: "DELETE" // 楽観的更新なし（詳細ページは削除後に画面遷移）
+      });
 
-      if (response.success) {
-        showSuccessToast('投稿を削除しました', 8000, {
-          label: '復元しますか？',
-          action: () => restorePostInDetail(postId)
-        })
-        setTimeout(async () => {
-          await navigateTo('/')
-        }, 2000)
+      if (response && typeof response === "object" && "success" in response) { // レスポンス型ガード
+        if (response.success) {
+          showSuccessToast("投稿を削除しました", 8000, { // 復元可能な削除通知
+            label: "復元しますか？",
+            action: () => restorePostInDetail(postId)
+          });
+          setTimeout(() => navigateTo("/"), 2000); // 2秒後にトップページ遷移
+        } else {
+          showErrorToast("投稿の削除に失敗しました");
+        }
       } else {
-        showErrorToast('投稿の削除に失敗しました')
+        showErrorToast("投稿の削除に失敗しました");
       }
     } catch (error: any) {
-      console.error('投稿削除エラー:', error)
       if (error.status === 403) {
-        showErrorToast('他のユーザーの投稿は削除できません')
+        showErrorToast("他のユーザーの投稿は削除できません"); // 権限エラー
       } else if (error.status === 404) {
-        showErrorToast('投稿が見つかりません')
+        showErrorToast("投稿が見つかりません"); // リソース不存在
       } else {
-        showErrorToast('ネットワークエラーが発生しました')
+        showErrorToast("ネットワークエラーが発生しました"); // その他のエラー
       }
     }
-  }
+  };
 
-  /**
-   * 投稿復元処理（一覧用）
-   * @param postId 復元する投稿ID
-   * @param post 復元する投稿オブジェクト
-   * @param originalIndex 元の位置
-   * @param posts 投稿一覧のref
-   * @returns Promise<void>
-   */
+  // 一覧用復元処理（元の位置にUI復元）
   const restorePostInList = async (postId: number, post: Post, originalIndex: number, posts: Ref<Post[]>) => {
     try {
-      console.log('🔄 投稿復元開始:', postId)
+      const response = await $fetch<RestoreResponse>(`/api/posts/${postId}/restore`, {
+        method: "POST"
+      });
 
-      const response = await $fetch(`/api/posts/${postId}/restore`, {
-        method: 'POST'
-      })
-
-      if (response.success) {
-        console.log('✅ 投稿復元成功:', response.message)
-        // 元の位置に投稿を復元
-        posts.value.splice(originalIndex, 0, post)
-        showSuccessToast('投稿を復元しました')
+      if (response && typeof response === "object" && "success" in response) { // レスポンス型ガード
+        if (response.success) {
+          posts.value.splice(originalIndex, 0, post); // 元の位置に投稿を復元（配列操作）
+          showSuccessToast("投稿を復元しました");
+        } else {
+          showErrorToast("投稿の復元に失敗しました");
+        }
       } else {
-        console.error('❌ 投稿復元失敗:', response.error)
-        showErrorToast('投稿の復元に失敗しました')
+        showErrorToast("投稿の復元に失敗しました");
       }
     } catch (error) {
-      console.error('投稿復元エラー:', error)
-      showErrorToast('投稿の復元でエラーが発生しました')
+      showErrorToast("投稿の復元でエラーが発生しました");
     }
-  }
+  };
 
-  /**
-   * 投稿復元処理（詳細ページ用）
-   * @param postId 復元する投稿ID
-   * @returns Promise<void>
-   */
+  // 詳細ページ用復元処理（UI配列操作なし、復元後に詳細ページ遷移）
   const restorePostInDetail = async (postId: number) => {
     try {
-      console.log('🔄 投稿復元開始:', postId)
+      const response = await $fetch<RestoreResponse>(`/api/posts/${postId}/restore`, {
+        method: "POST" 
+      });
 
-      const response = await $fetch(`/api/posts/${postId}/restore`, {
-        method: 'POST'
-      })
-
-      if (response.success) {
-        console.log('✅ 投稿復元成功:', response.message)
-        showSuccessToast('投稿を復元しました')
-        await navigateTo(`/posts/${postId}`)
+      if (response && typeof response === "object" && "success" in response) {
+        if (response.success) {
+          showSuccessToast("投稿を復元しました");
+          await navigateTo(`/posts/${postId}`); // 復元された投稿の詳細ページに遷移
+        } else {
+          showErrorToast("投稿の復元に失敗しました");
+        }
       } else {
-        console.error('❌ 投稿復元失敗:', response.error)
-        showErrorToast('投稿の復元に失敗しました')
+        showErrorToast("投稿の復元に失敗しました");
       }
     } catch (error) {
-      console.error('投稿復元エラー:', error)
-      showErrorToast('投稿の復元でエラーが発生しました')
+      showErrorToast("投稿の復元でエラーが発生しました");
     }
-  }
+  };
 
+  // 各機能の使い分け: handlePostDeletedInList(一覧用楽観更新), handlePostDeletedInDetail(詳細用遷移), restorePostInList(一覧復元), restorePostInDetail(詳細復元)
   return {
     handlePostDeletedInList,
     handlePostDeletedInDetail,
     restorePostInList,
     restorePostInDetail
-  }
-}
+  };
+};
