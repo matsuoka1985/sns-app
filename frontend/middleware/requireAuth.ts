@@ -20,7 +20,10 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
       const cookieHeader = event.node.req.headers.cookie || '' // HTTPリクエストからCookieヘッダーを取得
       console.log(' [AUTH MIDDLEWARE SERVER] Cookie header:', cookieHeader.includes('auth_jwt') ? 'JWT あり' : 'JWT なし')
 
-      const authCheck = await $fetch('/api/auth/check', { // 内部API呼び出しによる認証チェック
+      const config = useRuntimeConfig();
+      const apiBaseUrl = config.apiBaseUrlServer || 'http://nginx';
+      
+      const authCheck = await $fetch(`${apiBaseUrl}/api/auth/check`, { // Laravel直接呼び出し
         headers: {
           'Cookie': cookieHeader
         }
@@ -66,8 +69,11 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
   console.log(' [AUTH MIDDLEWARE CLIENT] クライアントサイド認証チェック開始') // SPA遷移時のフォールバック認証チェック
 
   try {
-    const authCheck = await $fetch('/api/auth/check', { // credentials: 'include'でCookie自動送信
-      credentials: 'include'
+    const config = useRuntimeConfig();
+    const apiBaseUrl = config.public.apiBaseUrl || 'http://localhost';
+    
+    const authCheck = await $fetch(`${apiBaseUrl}/api/auth/check`, { // Laravel直接呼び出し
+      credentials: 'include' // HTTP-Only Cookie送信
     })
 
     if (!authCheck || typeof authCheck !== 'object') { // authCheckオブジェクトの型ガード

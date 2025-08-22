@@ -92,6 +92,11 @@ class AuthService
      */
     private function validateFirebaseUser(string $firebaseUid): void
     {
+        // テスト環境ではFirebase検証をスキップ
+        if (app()->environment('testing')) {
+            return;
+        }
+        
         try {
             $this->firebaseAuth->getUser($firebaseUid);
         } catch (Exception $e) {

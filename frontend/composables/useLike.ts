@@ -180,8 +180,11 @@ export const useLike = () => {
        * NuxtのサーバーサイドAPIルートを呼び出し
        * /api/posts/[id]/like.post.ts に対応
        */
-      const response = await $fetch<LikeResponse>(`/api/posts/${postId}/like`, {
+      const config = useRuntimeConfig();
+      const apiBaseUrl = config.public.apiBaseUrl;
+      const response = await $fetch<LikeResponse>(`${apiBaseUrl}/api/posts/${postId}/like`, {
         method: 'POST',
+        credentials: 'include',
         body: {
           isLiked: finalLikeState // サーバーに送信する最終的ないいね状態
         }

@@ -97,8 +97,11 @@ export const useMobilePost = () => {
        */
       console.log(' 投稿作成リクエスト送信:', { body: postBody.trim() });
 
-      const response = await $fetch<CreatePostResponse>('/api/posts', {
+      const config = useRuntimeConfig();
+      const apiBaseUrl = config.public.apiBaseUrl;
+      const response = await $fetch<CreatePostResponse>(`${apiBaseUrl}/api/posts`, {
         method: 'POST',
+        credentials: 'include',
         body: { body: postBody.trim() } // 前後の空白を除去して送信
       });
 
@@ -251,8 +254,11 @@ export const useMobilePost = () => {
        */
       console.log('投稿作成リクエスト送信（詳細用）:', { body: postBody.trim() });
 
-      const response = await $fetch<CreatePostResponse>('/api/posts', {
+      const config = useRuntimeConfig();
+      const apiBaseUrl = config.public.apiBaseUrl;
+      const response = await $fetch<CreatePostResponse>(`${apiBaseUrl}/api/posts`, {
         method: 'POST',
+        credentials: 'include',
         body: { body: postBody.trim() }
       });
 

@@ -21,6 +21,11 @@ class LikeController extends Controller
         try {
             $jwt = $request->cookie('auth_jwt');
             
+            // テスト環境では追加でヘッダーからもJWTをチェック
+            if (app()->environment('testing') && empty($jwt)) {
+                $jwt = $request->header('X-Test-JWT');
+            }
+            
             if (empty($jwt)) {
                 return response()->json([
                     'success' => false,
@@ -60,6 +65,11 @@ class LikeController extends Controller
     {
         try {
             $jwt = $request->cookie('auth_jwt');
+            
+            // テスト環境では追加でヘッダーからもJWTをチェック
+            if (app()->environment('testing') && empty($jwt)) {
+                $jwt = $request->header('X-Test-JWT');
+            }
             
             if (empty($jwt)) {
                 return response()->json([

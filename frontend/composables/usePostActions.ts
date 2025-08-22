@@ -18,8 +18,11 @@ export const usePostActions = () => {
     posts.value = posts.value.filter(post => post.id !== postId); // UI上で即座に削除（楽観的更新）
 
     try {
-      const response = await $fetch<DeleteResponse>(`/api/posts/${postId}`, {
-        method: "DELETE" // DELETEメソッドで削除API実行
+      const config = useRuntimeConfig();
+      const apiBaseUrl = config.public.apiBaseUrl;
+      const response = await $fetch<DeleteResponse>(`${apiBaseUrl}/api/posts/${postId}`, {
+        method: "DELETE", // DELETEメソッドで削除API実行
+        credentials: 'include'
       });
 
       if (response && typeof response === "object" && "success" in response) { // レスポンス型ガード
@@ -56,8 +59,11 @@ export const usePostActions = () => {
     if (!confirm("この投稿を削除してもよろしいですか？")) {return;}
 
     try {
-      const response = await $fetch<DeleteResponse>(`/api/posts/${postId}`, {
-        method: "DELETE" // 楽観的更新なし（詳細ページは削除後に画面遷移）
+      const config = useRuntimeConfig();
+      const apiBaseUrl = config.public.apiBaseUrl;
+      const response = await $fetch<DeleteResponse>(`${apiBaseUrl}/api/posts/${postId}`, {
+        method: "DELETE", // 楽観的更新なし（詳細ページは削除後に画面遷移）
+        credentials: 'include'
       });
 
       if (response && typeof response === "object" && "success" in response) { // レスポンス型ガード
@@ -87,8 +93,11 @@ export const usePostActions = () => {
   // 一覧用復元処理（元の位置にUI復元）
   const restorePostInList = async (postId: number, post: Post, originalIndex: number, posts: Ref<Post[]>) => {
     try {
-      const response = await $fetch<RestoreResponse>(`/api/posts/${postId}/restore`, {
-        method: "POST"
+      const config = useRuntimeConfig();
+      const apiBaseUrl = config.public.apiBaseUrl;
+      const response = await $fetch<RestoreResponse>(`${apiBaseUrl}/api/posts/${postId}/restore`, {
+        method: "POST",
+        credentials: 'include'
       });
 
       if (response && typeof response === "object" && "success" in response) { // レスポンス型ガード
@@ -109,8 +118,11 @@ export const usePostActions = () => {
   // 詳細ページ用復元処理（UI配列操作なし、復元後に詳細ページ遷移）
   const restorePostInDetail = async (postId: number) => {
     try {
-      const response = await $fetch<RestoreResponse>(`/api/posts/${postId}/restore`, {
-        method: "POST" 
+      const config = useRuntimeConfig();
+      const apiBaseUrl = config.public.apiBaseUrl;
+      const response = await $fetch<RestoreResponse>(`${apiBaseUrl}/api/posts/${postId}/restore`, {
+        method: "POST",
+        credentials: 'include'
       });
 
       if (response && typeof response === "object" && "success" in response) {

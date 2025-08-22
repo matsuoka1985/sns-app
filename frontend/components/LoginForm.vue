@@ -57,6 +57,16 @@ const passwordTouched = useIsFieldTouched('password');
 const isLoading = ref<boolean>(false); // 送信中フラグ
 const errorMessage = ref<string>('');  // API からのエラー表示用
 
+// === 環境設定 ===
+const config = useRuntimeConfig();
+const getApiBaseUrl = () => {
+  if (import.meta.server) {
+    return config.apiBaseUrlServer;
+  } else {
+    return config.public.apiBaseUrl;
+  }
+}
+
 // エラーメッセージの表示制御（blur後 or 送信後のみ表示。入力で即時消える）
 const emailErrorToShow = computed(() => {
   if (emailTouched.value || submitCount.value > 0) {
@@ -128,16 +138,20 @@ const onSubmit = handleSubmit(async (values) => {
     const idToken = await firebaseUser.getIdToken();
     console.log('Firebase IDトークン:', idToken);
 
-    // Nuxt API routeでHttpOnly Cookieを設定
-    const response = await $fetch<LoginResponse>('/api/auth/login', {
+    // Laravel API直接呼び出しでHttpOnly Cookieを設定
+    const response = await $fetch<LoginResponse>(`${getApiBaseUrl()}/api/auth/verify-token`, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
       body: {
         idToken: idToken
-      }
+      },
+      credentials: 'include' // HTTP-Only Cookie受信用
     });
 
     // APIレスポンスをコンソールに表示
-    console.log('Nuxt API レスポンス:', response);
+    console.log('Laravel API レスポンス:', response);
 
     if (response.success) {
       console.log('ログイン成功! HttpOnly Cookie設定完了:', response.user);

@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Services\AuthService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -86,30 +85,25 @@ final class AuthControllerTest extends TestCase
     #[Test]
     public function 全ての項目が入力されている場合会員情報が登録される(): void
     {
-        // AuthServiceをモックして、registerメソッドが成功レスポンスを返すようにする
-        $mockAuthService = $this->createMock(AuthService::class);
-        $mockAuthService->method('register')->willReturn([
-            'success' => true,
-            'user' => [
-                'id' => 1,
-                'firebase_uid' => 'test_uid_005',
-                'name' => 'テストユーザー',
-                'email' => 'test@example.com'
-            ]
-        ]);
-        
-        $this->app->instance(AuthService::class, $mockAuthService);
-
-        $response = $this->postJson('/api/auth/register', [
+        $userData = [
             'firebase_uid' => 'test_uid_005',
             'name' => 'テストユーザー',
             'email' => 'test@example.com',
             'password' => 'password123'
-        ]);
+        ];
+
+        $response = $this->postJson('/api/auth/register', $userData);
 
         $response->assertStatus(201);
         $response->assertJson([
             'success' => true
+        ]);
+
+        // DBにユーザーが実際に登録されているかを確認
+        $this->assertDatabaseHas('users', [
+            'firebase_uid' => 'test_uid_005',
+            'name' => 'テストユーザー',
+            'email' => 'test@example.com'
         ]);
     }
 }

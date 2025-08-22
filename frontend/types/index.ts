@@ -11,6 +11,7 @@ export interface Post {
   likes_count: number
   created_at: string
   is_liked: boolean
+  is_owner: boolean
   comments_count?: number
 }
 

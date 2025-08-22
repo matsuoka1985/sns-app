@@ -71,8 +71,11 @@ export const useAuth = () => {
   const handleLogout = async () => {
     try {
       // サーバーサイドのログアウトAPI呼び出し（Nuxtサーバーにおいてhttp onlyクッキーを削除）
-      await $fetch('/api/auth/logout', {
-        method: 'POST'
+      const config = useRuntimeConfig();
+      const apiBaseUrl = config.public.apiBaseUrl;
+      await $fetch(`${apiBaseUrl}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include'
       });
       // ログアウト成功時、ログインページにリダイレクト
       await navigateTo('/login');

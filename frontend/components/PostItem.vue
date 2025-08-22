@@ -58,8 +58,11 @@ const handleDelete = () => { //削除ボタンクリック時の処理 投稿ID�
         <img
           src="/images/heart.png"
           alt="いいね"
-          class="w-4 h-4 md:w-5 md:h-5 transition-all duration-300"
-          :style="post.is_liked ? 'filter: brightness(0) saturate(100%) invert(23%) sepia(100%) saturate(7500%) hue-rotate(340deg) brightness(1.2) contrast(1);' : 'filter: brightness(0) saturate(100%) invert(100%);'"
+          :class="[
+            'w-4 h-4 md:w-5 md:h-5 transition-all duration-300',
+            post.is_liked ? 'filter-red-heart' : 'filter-white-heart'
+          ]"
+          data-testid="heart-icon"
         />
 
         <!-- いいね数の表示 -->
@@ -69,12 +72,12 @@ const handleDelete = () => { //削除ボタンクリック時の処理 投稿ID�
 
       <!-- 削除ボタン（自分の投稿のみ表示） -->
       <button
-        v-if="post.user.id === currentUserId"
+        v-if="post.is_owner"
         @click="handleDelete"
         class="hover:opacity-80 transition-opacity"
       >
         <!--
-          - v-if="post.user.id === currentUserId": 投稿者が自分の場合のみ表示
+          - v-if="post.is_owner": 投稿の所有者の場合のみ表示
         -->
         <img src="/images/cross.png" alt="削除" class="w-4 h-4 md:w-5 md:h-5" />
         <!--

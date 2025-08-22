@@ -144,8 +144,11 @@ const createComment = handleSubmit(async () => {
      * $fetch: Nuxtのfetchラッパー（自動でJSONパース等を行う）
      * 型パラメータでレスポンスの型を指定
      */
-    const response = await $fetch<CommentResponse>(`/api/posts/${props.postId}/comments`, {
+    const config = useRuntimeConfig();
+    const apiBaseUrl = config.public.apiBaseUrl;
+    const response = await $fetch<CommentResponse>(`${apiBaseUrl}/api/posts/${props.postId}/comments`, {
       method: 'POST',
+      credentials: 'include',
       body: { body: body.trim() }
     });
 

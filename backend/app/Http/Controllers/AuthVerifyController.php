@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\TokenVerifyRequest;
 use App\Services\AuthVerifyService;
+use App\Services\JwtBlacklistService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Exception;
@@ -11,10 +12,12 @@ use Exception;
 class AuthVerifyController extends Controller
 {
     private $authVerifyService;
+    private $jwtBlacklistService;
 
-    public function __construct(AuthVerifyService $authVerifyService)
+    public function __construct(AuthVerifyService $authVerifyService, JwtBlacklistService $jwtBlacklistService)
     {
         $this->authVerifyService = $authVerifyService;
+        $this->jwtBlacklistService = $jwtBlacklistService;
     }
 
     public function verifyAndSetCookie(TokenVerifyRequest $request)
@@ -71,6 +74,16 @@ class AuthVerifyController extends Controller
                     'authenticated' => false,
                     'message' => 'JWTCookieが見つかりません'
                 ]);
+            }
+
+            // JWTブラックリストチェック
+            if ($this->jwtBlacklistService->isBlacklisted($jwt)) {
+                Log::info('JWT ブラックリスト検出 - 認証拒否');
+                
+                return response()->json([
+                    'authenticated' => false,
+                    'message' => 'JWTは無効化されています（ログアウト済み）'
+                ], 401);
             }
 
             $result = $this->authVerifyService->checkAuth($jwt);
@@ -168,20 +181,40 @@ class AuthVerifyController extends Controller
         try {
             Log::info('ログアウト実行');
 
+            // HttpOnly CookieからJWTを取得
+            $jwt = $request->cookie('auth_jwt');
+            
+            if ($jwt) {
+                // JWTの有効期限を取得
+                $expiresAt = $this->jwtBlacklistService->getJwtExpiration($jwt);
+                
+                // JWTをブラックリストに登録
+                $blacklistResult = $this->jwtBlacklistService->addToBlacklist($jwt, $expiresAt);
+                
+                if ($blacklistResult) {
+                    Log::info('JWT ブラックリスト登録完了');
+                } else {
+                    Log::warning('JWT ブラックリスト登録失敗（処理は続行）');
+                }
+            } else {
+                Log::info('JWT Cookie なし（ブラックリスト登録スキップ）');
+            }
+
+            // HTTP-Only Cookieを削除してレスポンス
             $response = response()->json([
                 'success' => true,
                 'message' => 'ログアウトしました'
             ]);
 
             return $response->withCookie(cookie(
-                'auth_jwt', 
-                '', 
-                -1, 
-                '/', 
-                'localhost', 
-                false, 
-                true, 
-                false, 
+                'auth_jwt',
+                '',
+                -1, // 即座に削除
+                '/',
+                'localhost',
+                false,
+                true,
+                false,
                 'lax'
             ));
 

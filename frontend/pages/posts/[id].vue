@@ -18,7 +18,11 @@ const currentUserId = ref<number | null>(null); // 現在認証中のユーザ�
 const fetchPost = async () => { // 指定IDの投稿詳細をサーバーから取得
   try {
     console.log(' 投稿詳細取得開始 - PostID:', postId);
-    const response = await $fetch<PostDetailResponse>(`/api/posts/${postId}`);
+    const config = useRuntimeConfig();
+    const apiBaseUrl = config.public.apiBaseUrl;
+    const response = await $fetch<PostDetailResponse>(`${apiBaseUrl}/api/posts/${postId}`, {
+      credentials: 'include'
+    });
 
     if (!response || typeof response !== 'object') {
       console.error(' 投稿詳細取得: レスポンスが無効');
@@ -263,9 +267,8 @@ useHead({ // SEO・ソーシャル共有対応のメタデータ設定
       <!-- サイドバー（デスクトップのみ） -->
       <DesktopSidebar
         class="hidden md:block"
-        :post-body="sharedPostBody"
+        v-model:post-body="sharedPostBody"
         @new-post="handleNewPost"
-        @update-body="sharedPostBody = $event"
       />
 
       <!-- メインコンテンツ -->

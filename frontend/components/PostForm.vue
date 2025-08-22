@@ -103,9 +103,12 @@ const createPost = handleSubmit(async () => {
   // === API通信処理 ===
   isPosting.value = true; // 投稿中状態に変更（UIの無効化）
   try {
+    const config = useRuntimeConfig();
+    const apiBaseUrl = config.public.apiBaseUrl;
     // 投稿作成APIを呼び出し
-    const response = await $fetch<PostResponse>('/api/posts', {
+    const response = await $fetch<PostResponse>(`${apiBaseUrl}/api/posts`, {
       method: 'POST',
+      credentials: 'include',
       body: { body: body.value.trim() }
     });
 

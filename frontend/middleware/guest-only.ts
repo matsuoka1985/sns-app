@@ -1,5 +1,3 @@
-import { verifyFirebaseToken } from '~/utils/firebase-auth'
-
 // 未認証ユーザー専用ページへのアクセス制御（ログイン済みの場合は/にリダイレクト）
 export default defineNuxtRouteMiddleware(async () => {
   if (import.meta.server) { // サーバーサイドでのみ実行（SSR最適化、ページフラッシュ防止）
@@ -11,25 +9,29 @@ export default defineNuxtRouteMiddleware(async () => {
       }
 
       const cookieHeader = event.node.req.headers.cookie || '' // HTTPリクエストのCookieヘッダー文字列を取得
-      const authJwtMatch = cookieHeader.match(/auth_jwt=([^;]+)/) // 正規表現でauth_jwt=値を抽出
-      const authJwtCookie = authJwtMatch ? authJwtMatch[1] : null // [1]でキャプチャグループの値部分のみ取得（[0]は"auth_jwt=値"全体）
 
-      if (!authJwtCookie) {
+      if (!cookieHeader.includes('auth_jwt')) {
         console.log(' [GUEST-ONLY] JWT Cookie なし - ページ表示許可')
         return // JWTなし = 未認証 = ゲストページ表示OK
       }
 
-      console.log(' [GUEST-ONLY] Firebase JWT検証を開始');
+      console.log(' [GUEST-ONLY] Laravel認証チェック開始');
 
-      const authResult = await verifyFirebaseToken(authJwtCookie) // Firebase Admin SDKでJWT検証（キャッシュ利用）
+      const config = useRuntimeConfig();
+      const apiBaseUrl = config.apiBaseUrlServer || 'http://nginx';
+      
+      const authResult = await $fetch(`${apiBaseUrl}/api/auth/check`, { // Laravel直接呼び出し
+        headers: {
+          'Cookie': cookieHeader
+        }
+      })
 
-      if (authResult.authenticated) {
+      if (authResult && typeof authResult === 'object' && 'authenticated' in authResult && authResult.authenticated) {
         console.log(' [GUEST-ONLY] 認証済みユーザー検出 - ホームページにリダイレクト')
-        console.log(' [GUEST-ONLY] ユーザーUID:', authResult.uid)
+        console.log(' [GUEST-ONLY] ユーザー情報:', authResult.user)
         return navigateTo('/') // 既にログイン済みなのでメインページに案内
       } else {
-        console.log(' [GUEST-ONLY] JWT無効 - 未認証として扱いページ表示許可')
-        console.log(' [GUEST-ONLY] JWT無効の理由:', authResult.error)
+        console.log(' [GUEST-ONLY] 未認証 - ページ表示許可')
         // return文なし = ページ表示継続（ゲストとしてログイン・登録ページの利用を許可）
       }
     } catch (error) {

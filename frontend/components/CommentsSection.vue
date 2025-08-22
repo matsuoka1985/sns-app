@@ -26,9 +26,12 @@ const { isLoading, hasMore, handleScroll, loadNextPage, reset } = useInfiniteScr
 // === API関数 ===
 const fetchComments = async (page: number = 1) => { // コメント一覧を取得する関数（ページネーション対応）
   try {
+    const config = useRuntimeConfig();
+    const apiBaseUrl = config.public.apiBaseUrl;
     // NuxtのfetchAPIでコメントデータを取得
-    const response = await $fetch<CommentsResponse>(`/api/posts/${props.postId}/comments`, {
+    const response = await $fetch<CommentsResponse>(`${apiBaseUrl}/api/posts/${props.postId}/comments`, {
       method: 'GET',
+      credentials: 'include',
       query: {
         page: page, // ページ番号
         per_page: 20 // 1ページあたりの取得件数
@@ -160,13 +163,14 @@ defineExpose({
         v-for="comment in comments"
         :key="comment.id"
         class="border-b border-l border-white p-4 md:p-6"
+        data-testid="comment-item"
       >
         <!-- コメントヘッダー: ユーザー名 -->
         <div class="mb-2">
-          <h4 class="text-white font-bold">{{ comment.user.name }}</h4>
+          <h4 class="text-white font-bold" data-testid="comment-user-name">{{ comment.user.name }}</h4>
         </div>
         <!-- コメント本文: 改行対応 -->
-        <p class="text-white break-words">{{ comment.body }}</p>
+        <p class="text-white break-words" data-testid="comment-body">{{ comment.body }}</p>
       </article>
 
       <!-- 無限スクロール用ローダー -->
