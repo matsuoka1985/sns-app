@@ -7,6 +7,9 @@ DB_ROOT_PASSWORD ?= root
 setup:
 	@echo "=== Laravel Setup Start ==="
 
+	# ─── ensure cache dir ───
+	mkdir -p bootstrap/cache
+
 	# ─── Composer Install ───
 	composer install --no-interaction --prefer-dist
 
