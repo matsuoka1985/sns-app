@@ -172,7 +172,14 @@ const createComment = handleSubmit(async () => {
       const { error: showErrorToast } = useToast();
       showErrorToast(errorMessage);
     }
-  } catch (error) {
+  } catch (error: any) {
+    // 認証エラー時のリダイレクト処理
+    if (error.status === 401) {
+      console.log('認証エラーによりログインページにリダイレクト');
+      await navigateTo('/login');
+      return;
+    }
+    
     // ネットワークエラーやその他の例外処理
     console.error('コメント作成エラー:', error);
     const { error: showErrorToast } = useToast();
@@ -212,15 +219,16 @@ const createComment = handleSubmit(async () => {
         BaseButton: カスタムボタンコンポーネント
         - type="submit": フォーム送信ボタンとして動作
         - disabled条件:
-          - 入力内容がない（trim()で空白除去後も空）
           - 文字数超過状態
           - props.disabledがtrue
+          - コメント送信中
         - loading: 送信中のローディング状態
         - loading-text: ローディング中に表示するテキスト
+        - 空文字でもボタンは押せるようにし、バリデーションメッセージを表示する仕様に変更
       -->
       <BaseButton
         type="submit"
-        :disabled="!(commentBody || '').trim() || isOverLimit || disabled"
+        :disabled="isOverLimit || disabled || isCommenting"
         :loading="isCommenting"
         loading-text="コメント中..."
         size="md"

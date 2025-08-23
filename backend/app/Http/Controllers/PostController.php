@@ -23,11 +23,6 @@ class PostController extends Controller
             $perPage = (int) $request->get('per_page', 20);
             $jwt = $request->cookie('auth_jwt');
             
-            // テスト環境では追加でヘッダーからもJWTをチェック
-            if (app()->environment('testing') && empty($jwt)) {
-                $jwt = $request->header('X-Test-JWT');
-            }
-            
             $result = $this->postService->getPosts($page, $perPage, $jwt);
             return response()->json($result);
 
@@ -84,11 +79,6 @@ class PostController extends Controller
     {
         try {
             $jwt = $request->cookie('auth_jwt');
-            
-            // テスト環境では追加でヘッダーからもJWTをチェック
-            if (app()->environment('testing') && empty($jwt)) {
-                $jwt = $request->header('X-Test-JWT');
-            }
             
             // 認証チェック
             if (empty($jwt)) {

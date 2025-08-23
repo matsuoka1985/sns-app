@@ -2,10 +2,10 @@
 
 namespace App\Services;
 
+use App\Contracts\FirebaseAuthInterface;
 use App\Repositories\PostRepositoryInterface;
 use App\Repositories\UserRepositoryInterface;
 use Illuminate\Support\Facades\Log;
-use Kreait\Firebase\Auth;
 use Exception;
 
 class PostService
@@ -17,7 +17,7 @@ class PostService
     public function __construct(
         PostRepositoryInterface $postRepository,
         UserRepositoryInterface $userRepository,
-        Auth $firebaseAuth
+        FirebaseAuthInterface $firebaseAuth
     ) {
         $this->postRepository = $postRepository;
         $this->userRepository = $userRepository;
@@ -31,20 +31,6 @@ class PostService
     {
         if (empty($jwt)) {
             return null;
-        }
-
-        // テスト環境ではFirebase検証をスキップ
-        if (app()->environment('testing')) {
-            try {
-                $payload = json_decode(base64_decode($jwt), true);
-                if ($payload && isset($payload['sub'])) {
-                    $user = $this->userRepository->findByFirebaseUid($payload['sub']);
-                    return $user ? $user->id : null;
-                }
-                return null;
-            } catch (Exception $e) {
-                return null;
-            }
         }
 
         try {

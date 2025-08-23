@@ -42,12 +42,14 @@ export const usePostActions = () => {
     } catch (error: any) {
       posts.value.splice(targetIndex, 0, targetPost); // 楽観的更新をロールバック（必須）
 
-      if (error.status === 403) {
+      if (error.status === 401) {
+        console.log('認証エラーによりログインページにリダイレクト');
+        await navigateTo('/login');
+        return;
+      } else if (error.status === 403) {
         showErrorToast("他のユーザーの投稿は削除できません"); // 権限エラー
       } else if (error.status === 404) {
         showErrorToast("投稿が見つかりません"); // リソース不存在
-      } else if (error.status === 401) {
-        showErrorToast("ログインが必要です"); // 認証エラー
       } else {
         showErrorToast("ネットワークエラーが発生しました"); // その他のエラー
       }
@@ -80,7 +82,11 @@ export const usePostActions = () => {
         showErrorToast("投稿の削除に失敗しました");
       }
     } catch (error: any) {
-      if (error.status === 403) {
+      if (error.status === 401) {
+        console.log('認証エラーによりログインページにリダイレクト');
+        await navigateTo('/login');
+        return;
+      } else if (error.status === 403) {
         showErrorToast("他のユーザーの投稿は削除できません"); // 権限エラー
       } else if (error.status === 404) {
         showErrorToast("投稿が見つかりません"); // リソース不存在
@@ -110,7 +116,12 @@ export const usePostActions = () => {
       } else {
         showErrorToast("投稿の復元に失敗しました");
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error.status === 401) {
+        console.log('認証エラーによりログインページにリダイレクト');
+        await navigateTo('/login');
+        return;
+      }
       showErrorToast("投稿の復元でエラーが発生しました");
     }
   };
@@ -135,7 +146,12 @@ export const usePostActions = () => {
       } else {
         showErrorToast("投稿の復元に失敗しました");
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error.status === 401) {
+        console.log('認証エラーによりログインページにリダイレクト');
+        await navigateTo('/login');
+        return;
+      }
       showErrorToast("投稿の復元でエラーが発生しました");
     }
   };

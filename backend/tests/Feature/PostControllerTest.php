@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use App\Models\Post;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Kreait\Firebase\Auth;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -95,10 +96,9 @@ class PostControllerTest extends TestCase
         $jwt = $this->createJwtToken($user);
 
         // テスト用ヘッダーでJWTを送信
-        $response = $this->withHeaders([
-                'X-Test-JWT' => $jwt
-            ])
-            ->getJson('/api/posts');
+        $response = $this->call('GET', '/api/posts', [], [
+            'auth_jwt' => $jwt
+        ]);
 
         // レスポンス検証
         $response->assertStatus(200)
@@ -143,13 +143,13 @@ class PostControllerTest extends TestCase
         // テストデータを作成
         $user = User::factory()->create(['name' => '投稿者ユーザー']);
         $otherUser = User::factory()->create(['name' => '他のユーザー']);
-        
+
         // 各ユーザーの投稿を作成
         $myPost = Post::factory()->create([
             'user_id' => $user->id,
             'body' => '自分の投稿'
         ]);
-        
+
         $otherPost = Post::factory()->create([
             'user_id' => $otherUser->id,
             'body' => '他人の投稿'
@@ -159,10 +159,9 @@ class PostControllerTest extends TestCase
         $jwt = $this->createJwtToken($user);
 
         // テスト用ヘッダーでJWTを送信
-        $response = $this->withHeaders([
-                'X-Test-JWT' => $jwt
-            ])
-            ->getJson('/api/posts');
+        $response = $this->call('GET', '/api/posts', [], [
+            'auth_jwt' => $jwt
+        ]);
 
         // レスポンス検証
         $response->assertStatus(200)
@@ -171,11 +170,11 @@ class PostControllerTest extends TestCase
             ]);
 
         $responseData = $response->json();
-        
+
         // 投稿の中から自分の投稿と他人の投稿を見つける
         $myPostData = null;
         $otherPostData = null;
-        
+
         foreach ($responseData['posts'] as $post) {
             if ($post['id'] == $myPost->id) {
                 $myPostData = $post;
@@ -188,13 +187,13 @@ class PostControllerTest extends TestCase
         // アサーション
         $this->assertNotNull($myPostData, '自分の投稿が見つかりません');
         $this->assertNotNull($otherPostData, '他人の投稿が見つかりません');
-        
+
         // 自分の投稿には削除権限がある（is_owner = true）
         $this->assertTrue($myPostData['is_owner'], '自分の投稿のis_ownerがtrueになっていません');
-        
+
         // 他人の投稿には削除権限がない（is_owner = false）
         $this->assertFalse($otherPostData['is_owner'], '他人の投稿のis_ownerがfalseになっていません');
-        
+
         // current_user_idの確認
         $this->assertEquals($user->id, $responseData['current_user_id'], 'current_user_idが期待する値と一致しません');
     }
@@ -215,11 +214,10 @@ class PostControllerTest extends TestCase
         // JWTトークンを作成
         $jwt = $this->createJwtToken($user);
 
-        // 投稿詳細取得APIを呼び出し（テスト環境ではヘッダーでJWTを送信）
-        $actual = $this->withHeaders([
-                'X-Test-JWT' => $jwt
-            ])
-            ->getJson("/api/posts/{$post->id}");
+        // 投稿詳細取得APIを呼び出し
+        $actual = $this->call('GET', "/api/posts/{$post->id}", [], [
+            'auth_jwt' => $jwt
+        ]);
 
         // レスポンス構造と内容を検証
         $actual->assertStatus(200);
@@ -254,8 +252,9 @@ class PostControllerTest extends TestCase
         $jwt = $this->createJwtToken($user);
 
         // 投稿詳細取得APIを呼び出し
-        $actual = $this->withHeaders(['X-Test-JWT' => $jwt])
-            ->getJson("/api/posts/{$post->id}");
+        $actual = $this->call('GET', "/api/posts/{$post->id}", [], [
+            'auth_jwt' => $jwt
+        ]);
 
         // いいね状態が正しく返されることを検証
         $actual->assertStatus(200);
@@ -276,8 +275,9 @@ class PostControllerTest extends TestCase
         $jwt = $this->createJwtToken($user);
 
         // 投稿詳細取得APIを呼び出し
-        $actual = $this->withHeaders(['X-Test-JWT' => $jwt])
-            ->getJson("/api/posts/{$post->id}");
+        $actual = $this->call('GET', "/api/posts/{$post->id}", [], [
+            'auth_jwt' => $jwt
+        ]);
 
         // 削除権限が正しく返されることを検証
         $actual->assertStatus(200);
@@ -298,8 +298,9 @@ class PostControllerTest extends TestCase
         $jwt = $this->createJwtToken($viewer);
 
         // 閲覧者として投稿詳細取得APIを呼び出し
-        $actual = $this->withHeaders(['X-Test-JWT' => $jwt])
-            ->getJson("/api/posts/{$post->id}");
+        $actual = $this->call('GET', "/api/posts/{$post->id}", [], [
+            'auth_jwt' => $jwt
+        ]);
 
         // 削除権限が付与されないことを検証
         $actual->assertStatus(200);
@@ -332,8 +333,9 @@ class PostControllerTest extends TestCase
         $jwt = $this->createJwtToken($user);
         $nonExistentId = 99999;
 
-        $actual = $this->withHeaders(['X-Test-JWT' => $jwt])
-            ->getJson("/api/posts/{$nonExistentId}");
+        $actual = $this->call('GET', "/api/posts/{$nonExistentId}", [], [
+            'auth_jwt' => $jwt
+        ]);
 
         // 404エラーが返されることを確認
         $actual->assertStatus(404);
@@ -347,12 +349,13 @@ class PostControllerTest extends TestCase
         // いいね数が0の投稿を作成
         $user = User::factory()->create();
         $post = Post::factory()->for($user)->create(['body' => 'いいね数0の投稿']);
-        
+
         $jwt = $this->createJwtToken($user);
 
         // 投稿一覧取得APIを呼び出し
-        $actual = $this->withHeaders(['X-Test-JWT' => $jwt])
-            ->getJson('/api/posts');
+        $actual = $this->call('GET', '/api/posts', [], [
+            'auth_jwt' => $jwt
+        ]);
 
         // いいね数が0であることを確認
         $actual->assertStatus(200);
@@ -367,17 +370,18 @@ class PostControllerTest extends TestCase
         $user = User::factory()->create();
         $otherUsers = User::factory()->count(3)->create();
         $post = Post::factory()->for($user)->create(['body' => 'いいね数3の投稿']);
-        
+
         // 3人のユーザーがいいねする
         foreach ($otherUsers as $otherUser) {
             $post->likes()->create(['user_id' => $otherUser->id]);
         }
-        
+
         $jwt = $this->createJwtToken($user);
 
         // 投稿一覧取得APIを呼び出し
-        $actual = $this->withHeaders(['X-Test-JWT' => $jwt])
-            ->getJson('/api/posts');
+        $actual = $this->call('GET', '/api/posts', [], [
+            'auth_jwt' => $jwt
+        ]);
 
         // いいね数が3であることを確認
         $actual->assertStatus(200);
@@ -391,12 +395,13 @@ class PostControllerTest extends TestCase
         // いいね数が0の投稿を作成
         $user = User::factory()->create();
         $post = Post::factory()->for($user)->create(['body' => 'いいね数0の投稿詳細']);
-        
+
         $jwt = $this->createJwtToken($user);
 
         // 投稿詳細取得APIを呼び出し
-        $actual = $this->withHeaders(['X-Test-JWT' => $jwt])
-            ->getJson("/api/posts/{$post->id}");
+        $actual = $this->call('GET', "/api/posts/{$post->id}", [], [
+            'auth_jwt' => $jwt
+        ]);
 
         // いいね数が0であることを確認
         $actual->assertStatus(200);
@@ -411,17 +416,18 @@ class PostControllerTest extends TestCase
         $user = User::factory()->create();
         $otherUsers = User::factory()->count(5)->create();
         $post = Post::factory()->for($user)->create(['body' => 'いいね数5の投稿詳細']);
-        
+
         // 5人のユーザーがいいねする
         foreach ($otherUsers as $otherUser) {
             $post->likes()->create(['user_id' => $otherUser->id]);
         }
-        
+
         $jwt = $this->createJwtToken($user);
 
         // 投稿詳細取得APIを呼び出し
-        $actual = $this->withHeaders(['X-Test-JWT' => $jwt])
-            ->getJson("/api/posts/{$post->id}");
+        $actual = $this->call('GET', "/api/posts/{$post->id}", [], [
+            'auth_jwt' => $jwt
+        ]);
 
         // いいね数が5であることを確認
         $actual->assertStatus(200);
@@ -429,15 +435,133 @@ class PostControllerTest extends TestCase
         $actual->assertJsonPath('post.likes_count', 5);
     }
 
-    /**
-     * テスト用のJWTトークンを作成
-     */
-    private function createJwtToken(User $user): string
+    #[Test]
+    public function ログイン済みのユーザーは投稿を送信できる(): void
     {
-        // テスト環境では実際のFirebase JWTは使用せず、ユーザーIDを含む簡単なトークンを作成
-        return base64_encode(json_encode([
-            'sub' => $user->firebase_uid,
-            'exp' => time() + 3600
-        ]));
+        // arrange
+        $user = User::factory()->create(['name' => 'テストユーザー']);
+        $inputBody = 'これはテスト投稿です';
+        $inputJwt = $this->createJwtToken($user);
+
+        // act
+        $response = $this->call('POST', '/api/posts', [
+            'body' => $inputBody
+        ], [
+            'auth_jwt' => $inputJwt
+        ]);
+        $actual = $response;
+
+        // assert
+        $actual->assertStatus(201);
+        $actual->assertJsonStructure([
+            'success',
+            'post' => [
+                'id',
+                'body',
+                'user' => [
+                    'id',
+                    'name'
+                ],
+                'likes_count'
+            ]
+        ]);
+        $actual->assertJsonPath('success', true);
+        $actual->assertJsonPath('post.body', $inputBody);
+        $actual->assertJsonPath('post.user.name', $user->name);
+        $actual->assertJsonPath('post.likes_count', 0);
+
+        // データベースに投稿が保存されていることを確認
+        $this->assertDatabaseHas('posts', [
+            'body' => $inputBody,
+            'user_id' => $user->id
+        ]);
     }
+
+    #[Test]
+    public function 未ログインユーザーは投稿を送信できない(): void
+    {
+        // arrange
+        $inputBody = 'ログインしていないユーザーからの投稿';
+
+        // act - JWTトークンなしで投稿を試行
+        $actual = $this->postJson('/api/posts', [
+            'body' => $inputBody
+        ]);
+
+        // assert
+        $actual->assertStatus(401);
+        $actual->assertJsonPath('success', false);
+        $actual->assertJsonPath('error', '認証が必要です');
+
+        // データベースに投稿が保存されていないことを確認
+        $this->assertDatabaseMissing('posts', [
+            'body' => $inputBody
+        ]);
+    }
+
+    #[Test]
+    public function 投稿内容が未入力の場合バリデーションメッセージが表示される(): void
+    {
+        // arrange
+        $user = User::factory()->create(['name' => 'テストユーザー']);
+        $inputJwt = $this->createJwtToken($user);
+
+        // act - 空の投稿内容で送信
+        $actual = $this->call('POST', '/api/posts', [
+            'body' => ''
+        ], [
+            'auth_jwt' => $inputJwt
+        ]);
+
+        // assert
+        $actual->assertStatus(422);
+        $actual->assertJsonStructure([
+            'success',
+            'error',
+            'details' => [
+                'body'
+            ]
+        ]);
+        $actual->assertJsonPath('success', false);
+        $actual->assertJsonPath('error', 'バリデーションエラー');
+
+        // データベースに投稿が保存されていないことを確認
+        $this->assertDatabaseMissing('posts', [
+            'body' => ''
+        ]);
+    }
+
+    #[Test]
+    public function 投稿内容が120文字を超過した場合バリデーションメッセージが表示される(): void
+    {
+        // arrange
+        $user = User::factory()->create(['name' => 'テストユーザー']);
+        $inputJwt = $this->createJwtToken($user);
+        $inputBody = str_repeat('あ', 121); // 121文字の投稿内容
+
+        // act
+        $actual = $this->call('POST', '/api/posts', [
+            'body' => $inputBody
+        ], [
+            'auth_jwt' => $inputJwt
+        ]);
+
+        // assert
+        $actual->assertStatus(422);
+        $actual->assertJsonStructure([
+            'success',
+            'error',
+            'details' => [
+                'body'
+            ]
+        ]);
+        $actual->assertJsonPath('success', false);
+        $actual->assertJsonPath('error', 'バリデーションエラー');
+
+        // データベースに投稿が保存されていないことを確認
+        $this->assertDatabaseMissing('posts', [
+            'body' => $inputBody
+        ]);
+    }
+
 }

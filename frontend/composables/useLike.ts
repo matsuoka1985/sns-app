@@ -246,7 +246,14 @@ export const useLike = () => {
         console.error('予期しないいいねレスポンス構造:', response);
         showErrorToast('いいねの処理に失敗しました');
       }
-    } catch (error) {
+    } catch (error: any) {
+      // === 認証エラー時のリダイレクト処理 ===
+      if (error.status === 401) {
+        console.log('認証エラーによりログインページにリダイレクト');
+        await navigateTo('/login');
+        return;
+      }
+      
       // === ネットワークエラー・例外処理 ===
       /**
        * fetch失敗、ネットワーク切断、タイムアウトなどをキャッチ

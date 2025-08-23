@@ -135,7 +135,14 @@ const createPost = handleSubmit(async () => {
       const { error: showErrorToast } = useToast();
       showErrorToast('投稿の作成に失敗しました');
     }
-  } catch (error) {
+  } catch (error: any) {
+    // === 認証エラー時のリダイレクト処理 ===
+    if (error.status === 401) {
+      console.log('認証エラーによりログインページにリダイレクト');
+      await navigateTo('/login');
+      return;
+    }
+    
     // === ネットワークエラーやその他の例外処理 ===
     console.error('投稿作成エラー:', error);
     const { error: showErrorToast } = useToast();

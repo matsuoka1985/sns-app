@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
+use App\Contracts\FirebaseAuthInterface;
 use App\Repositories\UserRepositoryInterface;
 use Illuminate\Support\Facades\Log;
-use Kreait\Firebase\Auth;
 use Exception;
 
 class AuthService
@@ -12,7 +12,7 @@ class AuthService
     private $firebaseAuth;
     private $userRepository;
 
-    public function __construct(Auth $firebaseAuth, UserRepositoryInterface $userRepository)
+    public function __construct(FirebaseAuthInterface $firebaseAuth, UserRepositoryInterface $userRepository)
     {
         $this->firebaseAuth = $firebaseAuth;
         $this->userRepository = $userRepository;
@@ -92,11 +92,6 @@ class AuthService
      */
     private function validateFirebaseUser(string $firebaseUid): void
     {
-        // テスト環境ではFirebase検証をスキップ
-        if (app()->environment('testing')) {
-            return;
-        }
-        
         try {
             $this->firebaseAuth->getUser($firebaseUid);
         } catch (Exception $e) {

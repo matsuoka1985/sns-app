@@ -88,6 +88,7 @@ export interface AuthCheckResponse {
 
 export interface LikeResponse {
   success: boolean
+  post_id?: string
   is_liked?: boolean
   likes_count?: number
   error?: string

@@ -85,6 +85,7 @@ class LikeService
         return [
             'success' => true,
             'message' => 'いいねしました',
+            'post_id' => $postId,
             'likes_count' => $likesCount
         ];
     }
@@ -136,6 +137,7 @@ class LikeService
         return [
             'success' => true,
             'message' => 'いいねを解除しました',
+            'post_id' => $postId,
             'likes_count' => $likesCount
         ];
     }

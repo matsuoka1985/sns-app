@@ -2,11 +2,11 @@
 
 namespace App\Services;
 
+use App\Contracts\FirebaseAuthInterface;
 use App\Repositories\CommentRepositoryInterface;
 use App\Repositories\PostRepositoryInterface;
 use App\Repositories\UserRepositoryInterface;
 use Illuminate\Support\Facades\Log;
-use Kreait\Firebase\Auth;
 use Exception;
 
 class CommentService
@@ -20,7 +20,7 @@ class CommentService
         CommentRepositoryInterface $commentRepository,
         PostRepositoryInterface $postRepository,
         UserRepositoryInterface $userRepository,
-        Auth $firebaseAuth
+        FirebaseAuthInterface $firebaseAuth
     ) {
         $this->commentRepository = $commentRepository;
         $this->postRepository = $postRepository;

@@ -83,7 +83,6 @@ const fetchPosts = async (page: number = 1) => {
       }
 
       currentUserId.value = response.current_user_id;
-      console.log(` 投稿一覧取得成功 (ページ${page}):`, response.posts);
 
       return {
         data: response.posts,
@@ -176,7 +175,6 @@ onMounted(async () => {
     if (desktopScrollRef.value?.scrollRef) {
       // 無限スクロールのイベントリスナー設定
       cleanup = handleScroll(loadMore, desktopScrollRef.value.scrollRef);
-      console.log(' Infinite scroll setup completed for element:', desktopScrollRef.value.scrollRef);
     } else {
       console.warn(' desktopScrollRef not found, infinite scroll not set up');
     }
@@ -203,7 +201,7 @@ const postsListHeight = ref('auto'); // 投稿一覧の動的高さ
 
 // 高さ計算関数（現在は Flexbox で自動計算）
 const updatePostsListHeight = () => {
-  console.log(' Using flexbox auto height calculation');
+  // Flexbox で自動計算のため、特別な処理は不要
 };
 
 // PostsList コンポーネントへの参照（無限スクロール用）

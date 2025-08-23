@@ -72,15 +72,4 @@ class LikeControllerTest extends TestCase
         ]);
     }
 
-    /**
-     * テスト用のJWTトークンを作成
-     */
-    private function createJwtToken(User $user): string
-    {
-        // テスト環境では実際のFirebase JWTは使用せず、ユーザーIDを含む簡単なトークンを作成
-        return base64_encode(json_encode([
-            'sub' => $user->firebase_uid,
-            'exp' => time() + 3600
-        ]));
-    }
 }

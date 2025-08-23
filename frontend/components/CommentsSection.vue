@@ -138,7 +138,7 @@ defineExpose({
 
 <template>
   <!-- コメントヘッダー: タイトル表示エリア -->
-  <div ref="commentsHeaderRef" class="border-l border-b border-white p-4 md:p-6 flex-shrink-0 text-left">
+  <div ref="commentsHeaderRef" class="border-l border-b border-white p-4 md:p-6 flex-shrink-0 text-center">
     <h3 class="text-white text-lg md:text-lg font-bold">コメント</h3>
   </div>
 
