@@ -17,6 +17,7 @@ services:
       - ./backend:/var/www/
     depends_on:
       - mysql
+      - redis
 
 
 
@@ -31,6 +32,15 @@ services:
     volumes:
       - ./docker/mysql/data:/var/lib/mysql
       - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
+
+  redis:
+    image: redis:7.0.11-alpine
+    platform: linux/arm64
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./docker/redis/data:/data
+    command: redis-server --appendonly yes
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
@@ -58,3 +68,4 @@ services:
     ports:
       - 3000:3000
     tty: true
+    command: sh -c "npm install && npm run dev"

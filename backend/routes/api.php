@@ -1,31 +1,36 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Kreait\Firebase\Factory;
-use Illuminate\Http\Request;
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\AuthVerifyController;
+use App\Http\Controllers\PostController;
+use App\Http\Controllers\LikeController;
+use App\Http\Controllers\CommentController;
 
-Route::post('/auth/check-token', function (Request $request) {
-    $idToken = $request->bearerToken(); // Authorization: Bearer {idToken}
-    if (!$idToken) {
-        return response()->json(['error' => 'No token provided'], 400);
-    }
+Route::post('/auth/check-token', [AuthVerifyController::class, 'checkToken']);
 
-    try {
-        $auth = (new Factory)
-            ->withServiceAccount(config('firebase.credentials.file'))
-            ->createAuth();
+Route::post('/auth/firebase-login', [AuthVerifyController::class, 'firebaseLogin']);
 
-        $verifiedIdToken = $auth->verifyIdToken($idToken);
-        $uid = $verifiedIdToken->claims()->get('sub');
+// 新しい認証エンドポイント
+Route::post('/auth/register', [AuthController::class, 'register']);
+Route::post('/auth/login', [AuthController::class, 'login']);
 
-        return response()->json([
-            'uid' => $uid,
-            'message' => 'Token is valid',
-        ]);
-    } catch (\Throwable $e) {
-        return response()->json([
-            'error' => 'Invalid token',
-            'message' => $e->getMessage(),
-        ], 401);
-    }
-});
+// Firebase Admin SDK 認証検証（HTTP-Only Cookie）
+Route::post('/auth/verify-token', [AuthVerifyController::class, 'verifyAndSetCookie']);
+Route::get('/auth/check', [AuthVerifyController::class, 'checkAuth']);
+Route::post('/auth/logout', [AuthVerifyController::class, 'logout']);
+
+// 投稿関連のエンドポイント
+Route::get('/posts', [PostController::class, 'index']);
+Route::post('/posts', [PostController::class, 'store']);
+Route::get('/posts/{id}', [PostController::class, 'show']);
+Route::delete('/posts/{id}', [PostController::class, 'destroy']);
+Route::post('/posts/{id}/restore', [PostController::class, 'restore']);
+
+// いいね関連のエンドポイント
+Route::post('/posts/{postId}/like', [LikeController::class, 'store']);
+Route::delete('/posts/{postId}/like', [LikeController::class, 'destroy']);
+
+// コメント関連のエンドポイント
+Route::get('/posts/{postId}/comments', [CommentController::class, 'index']);
+Route::post('/posts/{postId}/comments', [CommentController::class, 'store']);

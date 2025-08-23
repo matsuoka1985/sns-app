@@ -1,21 +1,33 @@
-<template>
-  <div>
-    <button @click="loginWithGoogle">Googleでログイン</button>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 
-const { $firebaseAuth } = useNuxtApp()
+// === ページ設定 ===
+// ゲスト専用ミドルウェア - 認証済みユーザーは自動でホームにリダイレクト
+definePageMeta({
+  middleware: 'guest-only'
+});
 
-const loginWithGoogle = async () => {
-  const provider = new GoogleAuthProvider()
-  try {
-    const result = await signInWithPopup($firebaseAuth, provider)
-    console.log('ログイン成功:', result.user)
-  } catch (err) {
-    console.error('ログイン失敗:', err)
-  }
-}
+// === イベントハンドラー ===
+// ログイン成功時の処理：ホーム画面への遷移
+const handleLoginSuccess = async () => {
+  // navigateTo: Nuxt標準のページ遷移関数（Vue Routerの push() に相当）
+  await navigateTo('/');
+};
+
+// === SEO・メタデータ設定 ===
+useHead({
+  title: 'ログイン - SHARE'
+});
+
 </script>
+
+<template>
+  <!-- 認証画面専用のレイアウトコンポーネント -->
+  <AuthLayout>
+    <!--
+      LoginForm コンポーネント
+      @success: カスタムイベントリスナー（ログイン成功時に発火）
+      子コンポーネント → 親コンポーネントへの通信パターン
+    -->
+    <LoginForm @success="handleLoginSuccess" />
+  </AuthLayout>
+</template>
