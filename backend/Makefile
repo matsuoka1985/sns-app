@@ -10,6 +10,19 @@ setup:
 	# ─── ensure cache dir ───
 	mkdir -p bootstrap/cache
 
+	# ─── ensure storage framework dirs ───
+	mkdir -p storage/framework/cache
+	mkdir -p storage/framework/sessions
+	mkdir -p storage/framework/testing
+	mkdir -p storage/framework/views
+	mkdir -p storage/logs
+	touch storage/logs/laravel.log || true
+
+	# ─── permissions for web user (php-fpm) ───
+	chmod -R ug+rwx storage bootstrap/cache
+	-chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
+	-chgrp -R www-data storage bootstrap/cache 2>/dev/null || true
+
 	# ─── Composer Install ───
 	composer install --no-interaction --prefer-dist
 
