@@ -37,6 +37,25 @@ class PostService
             $verifiedIdToken = $this->firebaseAuth->verifyIdToken($jwt);
             $firebaseUid = $verifiedIdToken->claims()->get('sub');
             $user = $this->userRepository->findByFirebaseUid($firebaseUid);
+
+            // ユーザーが見つからない場合は自動作成
+            if (!$user) {
+                $firebaseUser = $this->firebaseAuth->getUser($firebaseUid);
+                $email = $firebaseUser->email;
+
+                if ($email) {
+                    $displayName = $firebaseUser->displayName
+                        ?: (strpos($email, '@') !== false ? strstr($email, '@', true) : 'User');
+
+                    $user = $this->userRepository->create([
+                        'firebase_uid' => $firebaseUid,
+                        'name' => $displayName,
+                        'email' => $email,
+                        'email_verified_at' => $firebaseUser->emailVerified ? now() : null,
+                    ]);
+                }
+            }
+
             return $user ? $user->id : null;
         } catch (Exception $e) {
             return null;
@@ -50,7 +69,7 @@ class PostService
     {
         $isLiked = false;
         $isOwner = false;
-        
+
         if ($currentUserId) {
             $isLiked = $post->likes->contains('user_id', $currentUserId);
             $isOwner = $post->user_id === $currentUserId;
