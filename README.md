@@ -19,13 +19,18 @@ git clone git@github.com:matsuoka1985/sns-app.git
 cd sns-app
 ```
 
-### 2. Dockerコンテナの起動
+### 2. Firebase 管理SDKの秘密鍵を配置
+
+1. Firebaseコンソール > プロジェクト設定 > サービスアカウント > **新しい秘密鍵を生成** から JSON をDL。
+2. DLしたファイルを `backend/storage/app/firebase/firebase-adminsdk.json` として配置。
+
+### 3. Dockerコンテナの起動
 
 ```bash
 docker compose up -d --build
 ```
 
-### 3. PHPコンテナへアクセス
+### 4. PHPコンテナへアクセス
 
 PHPコンテナのシェルに入るには、以下のコマンドを使用します。
 
@@ -33,36 +38,14 @@ PHPコンテナのシェルに入るには、以下のコマンドを使用し�
 docker compose exec php bash
 ```
 
-### 4. 初期セットアップ
+### 5. 初期セットアップ
 
 phpコンテナにログインした状態において以下のコマンドを実行することでcomposer installによるvendorディレクトリの作成、.envファイルの作成、APP_KEYの生成、マイグレーション、シーディングが一括で実行できます。
-
 ```bash
-# Composerパッケージのインストール
-composer install
-
-# 環境設定ファイルをコピー
-cp .env.example .env
-
-# アプリケーションキーを生成
-php artisan key:generate
-
-# データベースマイグレーションとシーディングを実行
-php artisan migrate --seed
+make setup
 ```
 
-### 5. フロントエンド（Nuxt.js）のセットアップ
 
-```bash
-# フロントエンドディレクトリに移動
-cd frontend
-
-# 依存関係をインストール
-npm install
-
-# 開発サーバーを起動
-npm run dev
-```
 
 -----
 
@@ -71,16 +54,15 @@ npm run dev
 ### 1. PHPUnitテスト（Laravel）の実行
 
 ```bash
-# PHPコンテナ内で実行
+# phpコンテナ内で実行
 docker compose exec php php artisan test
 ```
 
 ### 2. Vitestテスト（Nuxt.js）の実行
 
 ```bash
-# フロントエンドディレクトリで実行
-cd frontend
-npm run test
+# nuxtコンテナ内で実行
+docker compose exec nuxt npm run test
 ```
 
 -----
@@ -91,7 +73,6 @@ npm run test
 
 * **Nuxt.js フロントエンド**: [http://localhost:3000](http://localhost:3000)
 * **Laravel API**: [http://localhost:80](http://localhost:80)
-* **MailHog (開発用メール UI)**: [http://localhost:8025](http://localhost:8025)
 * **phpMyAdmin (データベース管理GUIツール UI)**: [http://localhost:8080](http://localhost:8080)
 * **Redis**: localhost:6379
 
@@ -99,7 +80,7 @@ npm run test
 
 以下の認証データによってテストアカウントでログインできます：
 
-- メールアドレス: `test@example.com`
+- メールアドレス: `dev@invalid.test`
 - パスワード: `password`
 
 ---
@@ -124,26 +105,6 @@ npm run test
 * PHPUnit (バックエンドテスト)
 
 ---
-
-## 機能一覧
-
-1. **ユーザー認証**
-   - ユーザー登録
-   - ログイン・ログアウト
-   - Firebase Authentication連携
-
-2. **投稿機能**
-   - 投稿作成・編集・削除
-   - 投稿一覧表示
-   - 投稿詳細表示
-
-3. **いいね機能**
-   - いいね・いいね解除
-   - いいね数表示
-
-4. **コメント機能**
-   - コメント投稿
-   - コメント一覧表示
 
 ---
 

@@ -143,17 +143,7 @@ class PostService
         return [
             'success' => true,
             'message' => '投稿を作成しました',
-            'post' => [
-                'id' => $createdPost->id,
-                'body' => $createdPost->body,
-                'user' => [
-                    'id' => $createdPost->user->id,
-                    'name' => $createdPost->user->name,
-                    'email' => $createdPost->user->email,
-                ],
-                'likes_count' => $createdPost->likes_count,
-                'is_liked' => false,
-            ]
+            'post' => $this->formatPostData($createdPost, $user->id)
         ];
     }
 
