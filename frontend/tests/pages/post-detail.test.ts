@@ -163,10 +163,7 @@ describe('PostDetailPage - いいね機能統合テスト（PostItemコンポー
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockFetch).toHaveBeenCalledWith(`${mockApiBaseUrl}/api/posts/1/like`, {
       method: 'POST',
-      credentials: 'include',
-      body: {
-        isLiked: true
-      }
+      credentials: 'include'
     });
 
     // いいね数が増加して表示されることを確認
@@ -323,11 +320,8 @@ describe('PostDetailPage - いいね機能統合テスト（PostItemコンポー
     // $fetchが正しいエンドポイントに呼ばれることを確認
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockFetch).toHaveBeenCalledWith(`${mockApiBaseUrl}/api/posts/1/like`, {
-      method: 'POST',
-      credentials: 'include',
-      body: {
-        isLiked: false
-      }
+      method: 'DELETE',
+      credentials: 'include'
     });
 
     // いいね数が減少していることを確認

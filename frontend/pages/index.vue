@@ -113,7 +113,8 @@ const loadInitialPosts = async () => {
     reset(); // 無限スクロール状態をリセット
 
     const result = await fetchPosts(1); // 1ページ目を取得
-    posts.value = result.data;
+    // 各投稿オブジェクトをリアクティブにして設定
+    posts.value = result.data.map(post => reactive(post));
   } catch (error) {
     console.error('初期投稿読み込みエラー:', error);
   } finally {
@@ -127,8 +128,13 @@ const loadMore = async () => {
   try {
     // loadNextPage: useInfiniteScrollのComposable関数
     const result = await loadNextPage(fetchPosts);
-    // スプレッド演算子で既存配列に追加データを結合
-    posts.value.push(...result.data);
+    // 追加データの各オブジェクトをリアクティブにして配列に結合（重複排除）
+    const existingIds = new Set(posts.value.map(post => post.id));
+    const newPosts = result.data
+      .filter(post => !existingIds.has(post.id)) // 既存IDと重複しない投稿のみ
+      .map(post => reactive(post));
+    
+    posts.value.push(...newPosts);
   } catch (error) {
     console.error('追加投稿読み込みエラー:', error);
   }
@@ -138,7 +144,6 @@ const loadMore = async () => {
 // === 各種Composable機能の取得 ===
 // 分割代入でComposableから必要な機能のみ抽出
 const { likingPosts, handleLike, cleanup: cleanupLike } = useLike();
-const { handleLogout } = useAuth();
 const { handlePostDeletedInList } = usePostActions();
 const { createMobilePostForList } = useMobilePost();
 
@@ -157,7 +162,12 @@ const handlePostDeleted = (postId: number) => {
 
 // 新規投稿追加：配列の先頭に新しい投稿を挿入
 const handleNewPost = (newPost: Post) => {
-  posts.value.unshift(newPost); // unshift()で配列の先頭に追加
+  // 重複チェック：同じIDの投稿が既に存在する場合は追加しない
+  const existingPost = posts.value.find(post => post.id === newPost.id);
+  if (existingPost) {
+    return;
+  }
+  posts.value.unshift(reactive(newPost)); // リアクティブにして配列の先頭に追加
 };
 
 // === 無限スクロール用クリーンアップ関数 ===
@@ -197,12 +207,6 @@ useHead({
 
 // === DOM参照用のref ===
 const headerRef = ref<HTMLElement | null>(null); // ヘッダー要素の参照
-const postsListHeight = ref('auto'); // 投稿一覧の動的高さ
-
-// 高さ計算関数（現在は Flexbox で自動計算）
-const updatePostsListHeight = () => {
-  // Flexbox で自動計算のため、特別な処理は不要
-};
 
 // PostsList コンポーネントへの参照（無限スクロール用）
 const desktopScrollRef = ref<PostsListComponent | null>(null);
@@ -219,7 +223,7 @@ const createMobilePost = async () => {
   isMobilePosting.value = true; // 処理中フラグを立てる
 
   // Composableの関数を呼び出し（コールバック関数を渡す）
-  const success = await createMobilePostForList(
+  await createMobilePostForList(
     sharedPostBody.value, // 投稿内容
     (newPost) => { // 成功時コールバック
       handleNewPost(newPost); // 新投稿を一覧に追加

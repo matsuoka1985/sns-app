@@ -1,6 +1,6 @@
 # アプリケーション名
 
-SNS アプリ
+SNSアプリ
 
 -----
 
@@ -21,7 +21,7 @@ cd sns-app
 
 ### 2. Firebase 管理SDKの秘密鍵を配置
 
-1. Firebaseコンソール > プロジェクト設定 > サービスアカウント > **新しい秘密鍵を生成** から JSON をDL。
+1. [Firebaseコンソール](https://console.firebase.google.com/project/sns-app-23ac6/overview) > プロジェクト設定 > サービスアカウント > **新しい秘密鍵を生成** から JSON をDL。
 2. DLしたファイルを `backend/storage/app/firebase/firebase-adminsdk.json` として配置。
 
 ### 3. Dockerコンテナの起動
@@ -88,23 +88,23 @@ docker compose exec nuxt npm run test
 ## 使用技術(実行環境)
 
 ### バックエンド
-* PHP 8.2
-* Laravel 11
+* PHP 8.2.28
+* Laravel 11.31
 * MySQL 8.0.37
 * Redis 7.0.11
 * nginx 1.21.1
 
 ### フロントエンド
-* Nuxt.js 3
-* Vue.js 3
-* TypeScript
+* Nuxt.js 3.17.5
+* Vue.js 3.5.17
+* TypeScript 5.8.3
+* Node.js 22.9.0
 
 ### その他
 * Firebase Authentication
 * Vitest (フロントエンドテスト)
 * PHPUnit (バックエンドテスト)
 
----
 
 ---
 
@@ -154,3 +154,8 @@ sns-app/
 ├── docker-compose.yml
 └── README.md
 ```
+
+## ER図
+
+
+![ER図](erd.png)

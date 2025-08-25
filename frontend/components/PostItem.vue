@@ -32,6 +32,7 @@ const handleLike = () => { //いいねボタンクリック時の処理 投稿ID
 const handleDelete = () => { //削除ボタンクリック時の処理 投稿IDを親コンポーネントに通知
   emit('delete', props.post.id);
 };
+
 </script>
 
 <template>

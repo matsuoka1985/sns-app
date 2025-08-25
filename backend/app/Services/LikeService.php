@@ -86,7 +86,8 @@ class LikeService
             'success' => true,
             'message' => 'いいねしました',
             'post_id' => $postId,
-            'likes_count' => $likesCount
+            'likes_count' => $likesCount,
+            'is_liked' => true
         ];
     }
 
@@ -138,7 +139,8 @@ class LikeService
             'success' => true,
             'message' => 'いいねを解除しました',
             'post_id' => $postId,
-            'likes_count' => $likesCount
+            'likes_count' => $likesCount,
+            'is_liked' => false
         ];
     }
 }

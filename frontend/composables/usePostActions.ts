@@ -70,11 +70,13 @@ export const usePostActions = () => {
 
       if (response && typeof response === "object" && "success" in response) { // レスポンス型ガード
         if (response.success) {
-          showSuccessToast("投稿を削除しました", 8000, { // 復元可能な削除通知
-            label: "復元しますか？",
-            action: () => restorePostInDetail(postId)
-          });
-          setTimeout(() => navigateTo("/"), 2000); // 2秒後にトップページ遷移
+          setTimeout(async () => {
+            await navigateTo("/"); // トップページ遷移を先に実行
+            showSuccessToast("投稿を削除しました", 8000, { // 遷移後にトースト表示
+              label: "復元しますか？",
+              action: () => restorePostInDetail(postId)
+            });
+          }, 0);
         } else {
           showErrorToast("投稿の削除に失敗しました");
         }

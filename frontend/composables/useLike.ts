@@ -60,7 +60,6 @@ export const useLike = () => {
   const handleLike = (post: Post | null, posts?: Ref<Post[]>) => {
     // === 入力バリデーション ===
     if (!post) {
-      console.log(' いいね対象の投稿が存在しません');
       return;
     };
 
@@ -72,7 +71,6 @@ export const useLike = () => {
      * サーバーへの同時リクエストによる409エラーやデータ競合を回避
      */
     if (likingPosts.value.has(postId)) {
-      console.log('いいね処理中のため無視:', postId);
       return;
     }
 
@@ -85,7 +83,6 @@ export const useLike = () => {
     if (likeTimeouts.value.has(postId)) {
       clearTimeout(likeTimeouts.value.get(postId)!);
       likeTimeouts.value.delete(postId);
-      console.log('既存タイマーをクリア:', postId);
     }
 
     // === 楽観的更新 ===
@@ -99,8 +96,9 @@ export const useLike = () => {
     // === 投稿一覧との同期 ===
     // 詳細ページでいいね→一覧ページでも即座に反映（データ整合性の保持）
     // Vue の参照型特性により、異なるページ間で同じPostオブジェクトを共有しない場合があるため明示的に同期
-    if (posts?.value) {
-      const listPost = posts.value.find(post => post.id === postId); // 一覧データから同じIDの投稿を検索
+    // 投稿一覧ページでは既に正しい参照を持っているため、この処理をスキップ
+    if (posts?.value && posts.value.find(listPost => listPost.id === postId) !== post) {
+      const listPost = posts.value.find(listPost => listPost.id === postId); // 一覧データから同じIDの投稿を検索
       if (listPost) {
         listPost.is_liked = post.is_liked; // 詳細ページで更新されたいいね状態を一覧にコピー
         listPost.likes_count = post.likes_count; // 詳細ページで更新されたいいね数を一覧にコピー
@@ -155,7 +153,6 @@ export const useLike = () => {
      * 稀にクリーンアップされている可能性があるため安全策
      */
     if (!likingPosts.value.has(postId)) {
-      console.log('既に処理完了済み:', postId)
       return;
     }
 
@@ -166,28 +163,23 @@ export const useLike = () => {
      */
     const finalLikeState = pendingLikes.value.get(postId)
     if (finalLikeState === undefined) {
-      console.warn('保留中のいいね状態が見つかりません:', postId)
       likingPosts.value.delete(postId)
       likeTimeouts.value.delete(postId)
       return
     }
 
     try {
-      console.log(' いいねリクエスト送信:', { postId, finalLikeState })
 
       // === API呼び出し ===
       /**
-       * NuxtのサーバーサイドAPIルートを呼び出し
-       * /api/posts/[id]/like.post.ts に対応
+       * いいね状態に応じてPOST（追加）またはDELETE（削除）を選択
+       * finalLikeState が true なら POST、false なら DELETE
        */
       const config = useRuntimeConfig();
       const apiBaseUrl = config.public.apiBaseUrl;
       const response = await $fetch<LikeResponse>(`${apiBaseUrl}/api/posts/${postId}/like`, {
-        method: 'POST',
-        credentials: 'include',
-        body: {
-          isLiked: finalLikeState // サーバーに送信する最終的ないいね状態
-        }
+        method: finalLikeState ? 'POST' : 'DELETE',
+        credentials: 'include'
       });
 
       // === レスポンスの型安全性チェック ===
@@ -199,41 +191,35 @@ export const useLike = () => {
       if (response && typeof response === 'object' && 'success' in response) {
         if (response.success) {
           // === 成功時の処理 ===
-          console.log('いいねAPI成功:', response);
 
           /**
            * サーバーからの正確なデータでUIを更新
            * 楽観的更新で仮設定した値をサーバーの正確な値で上書き
            * フォールバック値：サーバーからデータが不完全な場合の安全策
            */
-          Object.assign(post, {
-            is_liked: response.is_liked !== undefined ? response.is_liked : finalLikeState,
-            likes_count: response.likes_count !== undefined ? response.likes_count : post.likes_count
-          });
+          post.is_liked = response.is_liked !== undefined ? response.is_liked : finalLikeState;
+          post.likes_count = response.likes_count !== undefined ? response.likes_count : post.likes_count;
 
           // === 投稿一覧との同期（成功時） ===
           /**
            * 詳細ページで成功した場合、一覧ページも同じ値で更新
            * データ整合性の確保
+           * ただし、一覧ページでは既に同じ参照なのでスキップ
            */
-          if (posts?.value) {
-            const listPost = posts.value.find(p => p.id === postId)
+          if (posts?.value && posts.value.find(listPost => listPost.id === postId) !== post) {
+            const listPost = posts.value.find(listPost => listPost.id === postId)
             if (listPost) {
-              Object.assign(listPost, {
-                is_liked: post.is_liked,
-                likes_count: post.likes_count
-              });
+              listPost.is_liked = post.is_liked;
+              listPost.likes_count = post.likes_count;
             }
           }
 
-          console.log('いいね更新完了:', { postId, is_liked: post.is_liked, likes_count: post.likes_count })
         } else {
           // === 失敗時の処理 ===
           /**
            * APIが失敗を返した場合（ビジネスロジックエラー）
            * 例：権限なし、投稿が削除済み、バリデーションエラーなど
            */
-          console.error(' いいね失敗:', response.error || '不明なエラー');
           showErrorToast('いいねの処理に失敗しました');
           // 注意：楽観的更新済みのUIはそのまま（ロールバック処理は複雑化を避けるため省略）
         }
@@ -243,13 +229,11 @@ export const useLike = () => {
          * APIが期待しない形式のレスポンスを返した場合
          * サーバーエラー、ネットワーク問題、API仕様変更などで発生
          */
-        console.error('予期しないいいねレスポンス構造:', response);
         showErrorToast('いいねの処理に失敗しました');
       }
     } catch (error: any) {
       // === 認証エラー時のリダイレクト処理 ===
       if (error.status === 401) {
-        console.log('認証エラーによりログインページにリダイレクト');
         await navigateTo('/login');
         return;
       }
@@ -260,8 +244,6 @@ export const useLike = () => {
        * エラー時もUIは楽観的更新済みなので、ユーザーには成功として見える
        * （サーバーエラーでもUXを損なわない設計思想）
        */
-      console.error('いいねリクエストエラー:', error);
-      console.log('いいねリクエスト完了 (エラーだが無言処理):', { postId });
       // 意図的にトースト表示しない：楽観的更新により見た目上は成功
     } finally {
       // === クリーンアップ（必須処理） ===
@@ -272,7 +254,6 @@ export const useLike = () => {
       likingPosts.value.delete(postId); // 処理中フラグを解除
       pendingLikes.value.delete(postId); // 保留状態をクリア
       likeTimeouts.value.delete(postId); // タイマー参照を削除
-      console.log('🧹 いいね処理のクリーンアップ完了:', postId);
     }
   }
 
@@ -291,9 +272,8 @@ export const useLike = () => {
   const cleanup = () => {
 
     // すべてのタイマーをクリア（メモリリーク防止）
-    likeTimeouts.value.forEach((timeout, postId) => {
+    likeTimeouts.value.forEach((timeout) => {
       clearTimeout(timeout)
-      console.log('タイマークリア:', postId)
     });
 
     // 全ての状態をリセット

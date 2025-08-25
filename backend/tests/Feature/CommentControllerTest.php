@@ -23,12 +23,12 @@ class CommentControllerTest extends TestCase
             'name' => $expectedUserName
         ]);
         $testPost = Post::factory()->for($testUser)->create();
-        
-        // 複数のコメントを作成（1つは特定の内容、残りはランダム）
+
+        // 複数のコメントを作成（期待するコメントを最後に作成して最初に表示されるようにする）
+        Comment::factory()->count(2)->for($testPost)->for($testUser)->create();
         Comment::factory()->for($testPost)->for($testUser)->create([
             'body' => $expectedCommentBody
         ]);
-        Comment::factory()->count(2)->for($testPost)->for($testUser)->create();
         $expectedCommentsCount = 3;
 
         // 実行：コメント一覧取得APIを呼び出し
@@ -52,8 +52,8 @@ class CommentControllerTest extends TestCase
         ]);
         $actual->assertJsonPath('success', true);
         $actual->assertJsonCount($expectedCommentsCount, 'comments');
-        $actual->assertJsonPath('comments.0.body', $expectedCommentBody);
-        $actual->assertJsonPath('comments.0.user.name', $expectedUserName);
+        $actual->assertJsonPath('comments.2.body', $expectedCommentBody);
+        $actual->assertJsonPath('comments.2.user.name', $expectedUserName);
     }
 
     #[Test]

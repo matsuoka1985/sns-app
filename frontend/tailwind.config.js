@@ -7,6 +7,10 @@ export default {
     "./nuxt.config.{js,ts}",
     "./app.vue"
   ],
+  safelist: [
+    'filter-red-heart',
+    'filter-white-heart'
+  ],
   theme: {
     extend: {
       colors: {
