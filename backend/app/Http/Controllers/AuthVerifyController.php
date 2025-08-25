@@ -39,7 +39,7 @@ class AuthVerifyController extends Controller
                 $result['token'],
                 60 * 24 * 7,
                 '/',
-                'localhost',
+                parse_url(env('APP_URL', 'http://localhost'), PHP_URL_HOST),
                 false,
                 true,
                 false,
@@ -211,7 +211,7 @@ class AuthVerifyController extends Controller
                 '',
                 -1, // 即座に削除
                 '/',
-                'localhost',
+                parse_url(env('APP_URL', 'http://localhost'), PHP_URL_HOST),
                 false,
                 true,
                 false,

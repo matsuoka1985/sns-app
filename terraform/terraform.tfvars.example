@@ -1,0 +1,26 @@
+# Terraform Variables Example
+# このファイルをコピーして terraform.tfvars を作成してください
+
+# 基本設定
+aws_region   = "ap-northeast-1"
+project_name = "sns-app"
+environment  = "production"
+
+# ドメイン設定（実際のドメインに変更してください）
+domain_name = "example.com"
+
+# ECR Repository URL（事前にECRで作成してください）
+ecr_repository_url = "123456789012.dkr.ecr.ap-northeast-1.amazonaws.com/sns-app"
+
+# 機密情報（実際の値に変更してください）
+db_password = "your-secure-database-password"
+app_key     = "base64:your-laravel-app-key"
+
+# Firebase認証情報（Base64エンコードされたJSON）
+firebase_credentials = "ewogICJ0eXBlIjogInNlcnZpY2VfYWNjb3VudCIsCiAgInByb2plY3RfaWQiOiAieW91ci1maXJlYmFzZS1wcm9qZWN0IiwKICAuLi4KfQ=="
+
+# CORS設定
+cors_allowed_origins = "https://yourapp.vercel.app,https://yourdomain.com"
+
+# フロントエンドURL
+frontend_url = "https://yourapp.vercel.app"

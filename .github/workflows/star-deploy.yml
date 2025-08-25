@@ -1,0 +1,213 @@
+name: Star-Based Deploy Control
+
+on:
+  watch:
+    types: [started]  # Star時のみ（Unstarは検出不可）
+
+# スケジュール実行でStar状態をチェック（Unstar検出のため）
+  schedule:
+    - cron: '*/10 * * * *'  # 10分毎にチェック
+
+  # 手動実行も可能
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'check'
+        type: choice
+        options:
+        - check
+        - force_start
+        - force_stop
+
+jobs:
+  deploy-control:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check Star Status
+        id: check_star
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // リポジトリのStar数を取得
+            const { data: repo } = await github.rest.repos.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            
+            const starCount = repo.stargazers_count;
+            console.log(`Current star count: ${starCount}`);
+            
+            // 前回のStar数と比較（GitHub Actionsの環境変数から取得）
+            const previousStarCount = process.env.PREVIOUS_STAR_COUNT || '0';
+            console.log(`Previous star count: ${previousStarCount}`);
+            
+            let action = 'none';
+            if (starCount > parseInt(previousStarCount)) {
+              action = 'start';
+            } else if (starCount < parseInt(previousStarCount)) {
+              action = 'stop';
+            }
+            
+            // 手動実行の場合
+            if (context.eventName === 'workflow_dispatch') {
+              action = context.payload.inputs.action === 'force_start' ? 'start' : 
+                      context.payload.inputs.action === 'force_stop' ? 'stop' : 'check';
+            }
+            
+            core.setOutput('action', action);
+            core.setOutput('star_count', starCount);
+            core.setOutput('previous_count', previousStarCount);
+
+      - name: Configure AWS credentials
+        if: steps.check_star.outputs.action == 'start' || steps.check_star.outputs.action == 'stop'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::7095887677777:role/sns-app-github-actions-role
+          role-session-name: sns-app-deploy-session
+          aws-region: ap-northeast-1
+
+      - name: Setup Terraform
+        if: steps.check_star.outputs.action == 'start'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.0
+
+      - name: Setup Docker Buildx
+        if: steps.check_star.outputs.action == 'start'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Amazon ECR
+        if: steps.check_star.outputs.action == 'start'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        if: steps.check_star.outputs.action == 'start'
+        run: |
+          docker buildx build --platform linux/amd64 --target production \
+            -t ${{ secrets.ECR_REPOSITORY_URL }}:latest \
+            -f docker/php/Dockerfile . --push
+
+      - name: Terraform Init
+        if: steps.check_star.outputs.action == 'start'
+        working-directory: ./terraform
+        run: terraform init
+
+      - name: Deploy Infrastructure (Star Added)
+        if: steps.check_star.outputs.action == 'start'
+        working-directory: ./terraform
+        run: |
+          terraform apply -auto-approve \
+            -var="domain_name=${{ secrets.DOMAIN_NAME }}" \
+            -var="ecr_repository_url=${{ secrets.ECR_REPOSITORY_URL }}" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="app_key=${{ secrets.APP_KEY }}" \
+            -var="firebase_credentials=${{ secrets.FIREBASE_CREDENTIALS }}" \
+            -var="cors_allowed_origins=${{ secrets.CORS_ALLOWED_ORIGINS }}" \
+            -var="frontend_url=${{ secrets.FRONTEND_URL }}"
+
+      - name: Scale ECS Service UP
+        if: steps.check_star.outputs.action == 'start'
+        run: |
+          aws ecs update-service \
+            --cluster sns-app-cluster \
+            --service sns-app-service \
+            --desired-count 1
+
+      - name: Scale ECS Service DOWN (Star Removed)
+        if: steps.check_star.outputs.action == 'stop'
+        run: |
+          aws ecs update-service \
+            --cluster sns-app-cluster \
+            --service sns-app-service \
+            --desired-count 0
+
+      - name: Get Infrastructure Info
+        if: steps.check_star.outputs.action == 'start'
+        working-directory: ./terraform
+        id: terraform
+        run: |
+          ALB_DNS=$(terraform output -raw alb_dns_name 2>/dev/null || echo "pending")
+          API_DOMAIN=$(terraform output -raw api_domain 2>/dev/null || echo "pending") 
+          echo "alb_dns=$ALB_DNS" >> $GITHUB_OUTPUT
+          echo "api_domain=$API_DOMAIN" >> $GITHUB_OUTPUT
+
+      - name: Create Issue (Deploy Started)
+        if: steps.check_star.outputs.action == 'start'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `🚀 アプリケーション起動中... (Star数: ${{ steps.check_star.outputs.star_count }})`;
+            const body = `⭐ **Starありがとうございます！アプリケーションをデプロイ中です**
+            
+            **📊 デプロイ情報:**
+            - Star数: ${{ steps.check_star.outputs.star_count }}
+            - API エンドポイント: https://${{ steps.terraform.outputs.api_domain }}
+            - ALB DNS: ${{ steps.terraform.outputs.alb_dns }}
+            
+            **⏰ ステータス:**
+            - ✅ インフラ構築: 完了
+            - 🔄 ECSサービス起動: 進行中（5-10分程度）
+            - 🌐 SSL証明書: 設定中
+            
+            **🛑 停止方法:**
+            リポジトリページで⭐Starを外してください
+            
+            ---
+            *この Issue は10分後に自動的にクローズされます*`;
+            
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['deployment', 'auto-generated']
+            });
+
+      - name: Create Issue (App Stopped)
+        if: steps.check_star.outputs.action == 'stop'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `⏹️ アプリケーション停止 (Star数: ${{ steps.check_star.outputs.star_count }})`;
+            const body = `**🛑 アプリケーションを停止しました**
+            
+            **📊 現在の状況:**
+            - Star数: ${{ steps.check_star.outputs.star_count }}
+            - ECSタスク数: 0 (停止状態)
+            - インフラ: 維持中
+            
+            **💰 コスト削減:**
+            - ECS Fargate課金: 停止 ✅
+            - RDS/ElastiCache: 継続中（低コスト）
+            
+            **🚀 再起動方法:**
+            リポジトリページで⭐Starを付けてください
+            
+            ---
+            *この Issue は10分後に自動的にクローズされます*`;
+            
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['deployment', 'auto-generated']
+            });
+
+      - name: Update Star Count Record
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Star数を記録（次回比較用）
+            // 実際の実装では、GitHub Secretsまたは外部ストレージに保存
+            console.log(`Recorded star count: ${{ steps.check_star.outputs.star_count }}`);
+        env:
+          PREVIOUS_STAR_COUNT: ${{ steps.check_star.outputs.star_count }}

@@ -18,7 +18,7 @@ export default defineNuxtRouteMiddleware(async () => {
       console.log(' [GUEST-ONLY] Laravel認証チェック開始');
 
       const config = useRuntimeConfig();
-      const apiBaseUrl = config.apiBaseUrlServer || 'http://nginx';
+      const apiBaseUrl = config.apiBaseUrlServer;
       
       const authResult = await $fetch(`${apiBaseUrl}/api/auth/check`, { // Laravel直接呼び出し
         headers: {

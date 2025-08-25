@@ -49,7 +49,8 @@ class CommentSeeder extends Seeder
             ]);
             
             $this->command->info("投稿ID {$targetPost->id} に100件のテスト用コメントを作成しました！");
-            $this->command->info("テスト用URL: http://localhost:3000/posts/{$targetPost->id}");
+            $frontendUrl = env('FRONTEND_URL', 'http://localhost:3000');
+            $this->command->info("テスト用URL: {$frontendUrl}/posts/{$targetPost->id}");
         }
     }
 }

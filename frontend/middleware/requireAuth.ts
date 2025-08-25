@@ -21,7 +21,7 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
       console.log(' [AUTH MIDDLEWARE SERVER] Cookie header:', cookieHeader.includes('auth_jwt') ? 'JWT あり' : 'JWT なし')
 
       const config = useRuntimeConfig();
-      const apiBaseUrl = config.apiBaseUrlServer || 'http://nginx';
+      const apiBaseUrl = config.apiBaseUrlServer;
       
       const authCheck = await $fetch(`${apiBaseUrl}/api/auth/check`, { // Laravel直接呼び出し
         headers: {
@@ -70,7 +70,7 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
 
   try {
     const config = useRuntimeConfig();
-    const apiBaseUrl = config.public.apiBaseUrl || 'http://localhost';
+    const apiBaseUrl = config.public.apiBaseUrl;
     
     const authCheck = await $fetch(`${apiBaseUrl}/api/auth/check`, { // Laravel直接呼び出し
       credentials: 'include' // HTTP-Only Cookie送信
