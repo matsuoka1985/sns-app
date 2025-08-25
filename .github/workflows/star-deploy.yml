@@ -70,7 +70,7 @@ jobs:
         if: steps.check_star.outputs.action == 'start' || steps.check_star.outputs.action == 'stop'
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::7095887677777:role/sns-app-github-actions-role
+          role-to-assume: arn:aws:iam::709588767777:role/sns-app-github-actions-role
           role-session-name: sns-app-deploy-session
           aws-region: ap-northeast-1
 
