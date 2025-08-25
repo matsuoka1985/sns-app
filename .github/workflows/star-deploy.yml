@@ -100,16 +100,41 @@ jobs:
       - name: Cleanup existing resources
         if: steps.check_star.outputs.action == 'start'
         run: |
-          echo "Cleaning up existing resources..."
+          echo "🧹 Comprehensive cleanup of existing resources..."
+          
+          # Target Groups削除
           aws elbv2 delete-target-group --target-group-arn $(aws elbv2 describe-target-groups --names sns-app-tg --query 'TargetGroups[0].TargetGroupArn' --output text) || true
+          
+          # CloudWatch Logs削除
           aws logs delete-log-group --log-group-name /ecs/sns-app || true
+          
+          # ElastiCache Subnet Group削除
+          aws elasticache delete-cache-subnet-group --cache-subnet-group-name sns-app-cache-subnet || true
+          
+          # RDS Subnet Group削除
+          aws rds delete-db-subnet-group --db-subnet-group-name sns-app-db-subnet-group || true
+          
+          # IAM Role/Policy削除（依存関係を考慮した順序）
+          aws iam detach-role-policy --role-name sns-app-ecs-task-role --policy-arn $(aws iam list-policies --query 'Policies[?PolicyName==`sns-app-ecs-ssm-policy`].Arn' --output text) || true
           aws iam detach-role-policy --role-name sns-app-ecs-execution-role --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy || true
           aws iam delete-role --role-name sns-app-ecs-execution-role || true
           aws iam delete-role --role-name sns-app-ecs-task-role || true
           aws iam delete-policy --policy-arn $(aws iam list-policies --query 'Policies[?PolicyName==`sns-app-ecs-ssm-policy`].Arn' --output text) || true
+          
+          # SSMパラメータ削除
           aws ssm delete-parameter --name /sns-app/app_key || true
           aws ssm delete-parameter --name /sns-app/db_password || true
           aws ssm delete-parameter --name /sns-app/firebase_credentials || true
+          
+          # 既存のACM証明書削除（ドメイン名で検索）
+          CERT_ARNS=$(aws acm list-certificates --query 'CertificateSummaryList[?contains(DomainName,`${{ secrets.DOMAIN_NAME }}`)].CertificateArn' --output text)
+          for cert_arn in $CERT_ARNS; do
+            echo "Deleting certificate: $cert_arn"
+            aws acm delete-certificate --certificate-arn $cert_arn || true
+          done
+          
+          echo "✅ Cleanup completed, waiting 30 seconds for AWS propagation..."
+          sleep 30
 
       - name: Terraform Init
         if: steps.check_star.outputs.action == 'start'
