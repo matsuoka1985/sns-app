@@ -129,11 +129,14 @@ jobs:
             -var="cors_allowed_origins=${{ secrets.CORS_ALLOWED_ORIGINS }}" \
             -var="frontend_url=${{ secrets.FRONTEND_URL }}"
 
-      - name: Cleanup on failure
+      - name: Emergency Resource Cleanup on Failure
         if: failure()
-        working-directory: ./terraform
+        continue-on-error: true
         run: |
-          echo "Deployment failed, cleaning up resources..."
+          echo "🚨 DEPLOYMENT FAILED - EMERGENCY CLEANUP STARTING 🚨"
+          
+          # Terraform destroy (最優先)
+          cd terraform
           terraform destroy -auto-approve \
             -var="domain_name=${{ secrets.DOMAIN_NAME }}" \
             -var="ecr_repository_url=${{ secrets.ECR_REPOSITORY_URL }}" \
@@ -141,7 +144,62 @@ jobs:
             -var="app_key=${{ secrets.APP_KEY }}" \
             -var="firebase_credentials=${{ secrets.FIREBASE_CREDENTIALS }}" \
             -var="cors_allowed_origins=${{ secrets.CORS_ALLOWED_ORIGINS }}" \
-            -var="frontend_url=${{ secrets.FRONTEND_URL }}" || echo "Cleanup failed, manual intervention required"
+            -var="frontend_url=${{ secrets.FRONTEND_URL }}" || echo "Terraform destroy failed, proceeding with manual cleanup"
+          
+          cd ..
+          
+          echo "🧹 Manual cleanup of remaining resources..."
+          
+          # NAT Gateway削除 (最高優先 - $45/月)
+          NAT_IDS=$(aws ec2 describe-nat-gateways --filter "Name=tag:Name,Values=*sns-app*" --query 'NatGateways[?State==`available`].NatGatewayId' --output text)
+          for nat_id in $NAT_IDS; do
+            echo "Deleting NAT Gateway: $nat_id"
+            aws ec2 delete-nat-gateway --nat-gateway-id $nat_id || true
+          done
+          
+          # RDS削除 (高優先 - $15-30/月)
+          RDS_IDS=$(aws rds describe-db-instances --query 'DBInstances[?contains(DBInstanceIdentifier,`sns-app`)].DBInstanceIdentifier' --output text)
+          for rds_id in $RDS_IDS; do
+            echo "Deleting RDS instance: $rds_id"
+            aws rds delete-db-instance --db-instance-identifier $rds_id --skip-final-snapshot --delete-automated-backups || true
+          done
+          
+          # ElastiCache削除 (高優先 - $10-20/月)
+          CACHE_IDS=$(aws elasticache describe-replication-groups --query 'ReplicationGroups[?contains(ReplicationGroupId,`sns-app`)].ReplicationGroupId' --output text)
+          for cache_id in $CACHE_IDS; do
+            echo "Deleting ElastiCache: $cache_id"
+            aws elasticache delete-replication-group --replication-group-id $cache_id || true
+          done
+          
+          # ALB削除 (中優先 - $20/月)
+          ALB_ARNS=$(aws elbv2 describe-load-balancers --query 'LoadBalancers[?contains(LoadBalancerName,`sns-app`)].LoadBalancerArn' --output text)
+          for alb_arn in $ALB_ARNS; do
+            echo "Deleting ALB: $alb_arn"
+            aws elbv2 delete-load-balancer --load-balancer-arn $alb_arn || true
+          done
+          
+          # ECS Service/Cluster削除
+          aws ecs update-service --cluster sns-app-cluster --service sns-app-service --desired-count 0 || true
+          sleep 30
+          aws ecs delete-service --cluster sns-app-cluster --service sns-app-service || true
+          aws ecs delete-cluster --cluster sns-app-cluster || true
+          
+          # EIP削除 (低優先だが課金あり - $3.6/月)
+          sleep 120  # NAT Gateway削除待ち
+          EIP_IDS=$(aws ec2 describe-addresses --query 'Addresses[?contains(to_string(Tags),`sns-app`)].AllocationId' --output text)
+          for eip_id in $EIP_IDS; do
+            echo "Releasing EIP: $eip_id"
+            aws ec2 release-address --allocation-id $eip_id || true
+          done
+          
+          # Target Groups削除
+          TG_ARNS=$(aws elbv2 describe-target-groups --query 'TargetGroups[?contains(TargetGroupName,`sns-app`)].TargetGroupArn' --output text)
+          for tg_arn in $TG_ARNS; do
+            echo "Deleting Target Group: $tg_arn"
+            aws elbv2 delete-target-group --target-group-arn $tg_arn || true
+          done
+          
+          echo "✅ Emergency cleanup completed - major cost resources should be deleted"
 
       - name: Scale ECS Service UP
         if: steps.check_star.outputs.action == 'start'
