@@ -96,6 +96,20 @@ jobs:
             -t ${{ secrets.ECR_REPOSITORY_URL }}:latest \
             -f docker/php/Dockerfile . --push
 
+      - name: Cleanup existing resources
+        if: steps.check_star.outputs.action == 'start'
+        run: |
+          echo "Cleaning up existing resources..."
+          aws elbv2 delete-target-group --target-group-arn $(aws elbv2 describe-target-groups --names sns-app-tg --query 'TargetGroups[0].TargetGroupArn' --output text) || true
+          aws logs delete-log-group --log-group-name /ecs/sns-app || true
+          aws iam detach-role-policy --role-name sns-app-ecs-execution-role --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy || true
+          aws iam delete-role --role-name sns-app-ecs-execution-role || true
+          aws iam delete-role --role-name sns-app-ecs-task-role || true
+          aws iam delete-policy --policy-arn $(aws iam list-policies --query 'Policies[?PolicyName==`sns-app-ecs-ssm-policy`].Arn' --output text) || true
+          aws ssm delete-parameter --name /sns-app/app_key || true
+          aws ssm delete-parameter --name /sns-app/db_password || true
+          aws ssm delete-parameter --name /sns-app/firebase_credentials || true
+
       - name: Terraform Init
         if: steps.check_star.outputs.action == 'start'
         working-directory: ./terraform
