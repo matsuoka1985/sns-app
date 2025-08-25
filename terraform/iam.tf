@@ -80,5 +80,6 @@ data "aws_iam_role" "github_actions_role" {
   name = "sns-app-github-actions-role"
 }
 
+
 # Current AWS account data
 data "aws_caller_identity" "current" {}
