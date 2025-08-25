@@ -114,6 +114,20 @@ jobs:
             -var="cors_allowed_origins=${{ secrets.CORS_ALLOWED_ORIGINS }}" \
             -var="frontend_url=${{ secrets.FRONTEND_URL }}"
 
+      - name: Cleanup on failure
+        if: failure()
+        working-directory: ./terraform
+        run: |
+          echo "Deployment failed, cleaning up resources..."
+          terraform destroy -auto-approve \
+            -var="domain_name=${{ secrets.DOMAIN_NAME }}" \
+            -var="ecr_repository_url=${{ secrets.ECR_REPOSITORY_URL }}" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="app_key=${{ secrets.APP_KEY }}" \
+            -var="firebase_credentials=${{ secrets.FIREBASE_CREDENTIALS }}" \
+            -var="cors_allowed_origins=${{ secrets.CORS_ALLOWED_ORIGINS }}" \
+            -var="frontend_url=${{ secrets.FRONTEND_URL }}" || echo "Cleanup failed, manual intervention required"
+
       - name: Scale ECS Service UP
         if: steps.check_star.outputs.action == 'start'
         run: |
@@ -139,6 +153,38 @@ jobs:
           API_DOMAIN=$(terraform output -raw api_domain 2>/dev/null || echo "pending") 
           echo "alb_dns=$ALB_DNS" >> $GITHUB_OUTPUT
           echo "api_domain=$API_DOMAIN" >> $GITHUB_OUTPUT
+
+      - name: Create Issue (Cleanup Required)
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `⚠️ デプロイ失敗 - リソースクリーンアップ確認要`;
+            const body = `❌ **デプロイが失敗しました**
+            
+            **自動クリーンアップ実行済み**
+            ただし、AWS Console で以下を手動確認してください：
+            
+            **確認すべきリソース:**
+            - NAT Gateway (課金発生)
+            - EIP (Elastic IP)
+            - VPC
+            - ECS Cluster
+            - RDS Instance
+            
+            **手動削除が必要な場合:**
+            AWS Console > CloudFormation または各サービス画面で削除
+            
+            ---
+            *コスト発生を防ぐため、速やかに確認してください*`;
+            
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['deployment-failed', 'cleanup-required', 'urgent']
+            });
 
       - name: Create Issue (Deploy Started)
         if: steps.check_star.outputs.action == 'start'
