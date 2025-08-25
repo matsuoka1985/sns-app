@@ -141,6 +141,21 @@ jobs:
         working-directory: ./terraform
         run: terraform init
 
+      - name: Check DNS Configuration
+        if: steps.check_star.outputs.action == 'start'
+        run: |
+          echo "🔍 Checking DNS configuration for SSL certificate..."
+          
+          # Route53ネームサーバーを取得
+          NAMESERVERS=$(aws route53 get-hosted-zone --id $(aws route53 list-hosted-zones --query "HostedZones[?Name=='${{ secrets.DOMAIN_NAME }}.'].Id" --output text | cut -d'/' -f3) --query 'DelegationSet.NameServers' --output text)
+          echo "Route53 NameServers: $NAMESERVERS"
+          
+          # DNS伝播確認
+          for ns in $NAMESERVERS; do
+            echo "Checking DNS propagation on $ns"
+            dig @$ns ${{ secrets.DOMAIN_NAME }} SOA +short || true
+          done
+
       - name: Deploy Infrastructure (Star Added)
         if: steps.check_star.outputs.action == 'start'
         working-directory: ./terraform
