@@ -103,3 +103,9 @@ data "aws_iam_role" "github_actions_role" {
 
 # Current AWS account data
 data "aws_caller_identity" "current" {}
+
+# ECSタスク実行ロールにSSMパラメータ取得用ポリシーをアタッチ
+resource "aws_iam_role_policy_attachment" "ecs_execution_attach_ssm" {
+  role       = data.aws_iam_role.ecs_execution_role.name
+  policy_arn = data.aws_iam_policy.ecs_ssm_policy.arn
+}
