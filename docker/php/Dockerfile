@@ -51,8 +51,15 @@ RUN mkdir -p bootstrap/cache \
 RUN composer install --no-dev --optimize-autoloader --no-interaction
 
 # NPM install & Vite build（make setupと同様）
-RUN npm install --loglevel=error \
-    && npm run build
+# npm レジストリ設定とリトライ処理
+RUN npm config set registry https://registry.npmjs.org/ && \
+    npm config set fund false && \
+    npm config set audit false && \
+    npm cache clean --force && \
+    (npm install --no-fund --no-audit || \
+     (echo "First npm install failed, retrying..." && sleep 10 && npm install --no-fund --no-audit) || \
+     (echo "Second npm install failed, retrying with different registry..." && npm config set registry https://registry.yarnpkg.com/ && npm install --no-fund --no-audit)) && \
+    npm run build
 
 # .env準備（本番用は環境変数で上書き予定）
 RUN cp .env.example .env
