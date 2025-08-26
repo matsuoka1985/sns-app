@@ -55,8 +55,7 @@ RUN npm install --loglevel=error \
     && npm run build
 
 # .env準備（本番用は環境変数で上書き予定）
-RUN cp .env.example .env \
-    && php artisan key:generate --ansi
+RUN cp .env.example .env
 
 # Firebase認証情報ファイル作成（環境変数から）
 RUN mkdir -p storage/app/firebase

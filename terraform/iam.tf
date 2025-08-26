@@ -1,5 +1,11 @@
-# ECS Task Execution Role
-resource "aws_iam_role" "ecs_execution_role" {
+# ECS Task Execution Role（既存を参照）
+data "aws_iam_role" "ecs_execution_role" {
+  name = "${var.project_name}-ecs-execution-role"
+}
+
+# ECS Task Execution Role（データソースがない場合のフォールバック）
+resource "aws_iam_role" "ecs_execution_role_fallback" {
+  count = 0  # 通常は作成しない
   name = "${var.project_name}-ecs-execution-role"
 
   assume_role_policy = jsonencode({
@@ -20,13 +26,20 @@ resource "aws_iam_role" "ecs_execution_role" {
   }
 }
 
-resource "aws_iam_role_policy_attachment" "ecs_execution_role_policy" {
-  role       = aws_iam_role.ecs_execution_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+# ポリシーアタッチメントは既存ロールに対して実行済みと仮定してスキップ
+# resource "aws_iam_role_policy_attachment" "ecs_execution_role_policy" {
+#   role       = data.aws_iam_role.ecs_execution_role.name
+#   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+# }
+
+# ECS Task Role（既存を参照）
+data "aws_iam_role" "ecs_task_role" {
+  name = "${var.project_name}-ecs-task-role"
 }
 
-# ECS Task Role
-resource "aws_iam_role" "ecs_task_role" {
+# ECS Task Role（フォールバック）
+resource "aws_iam_role" "ecs_task_role_fallback" {
+  count = 0  # 通常は作成しない
   name = "${var.project_name}-ecs-task-role"
 
   assume_role_policy = jsonencode({
@@ -47,8 +60,14 @@ resource "aws_iam_role" "ecs_task_role" {
   }
 }
 
-# SSMパラメータアクセス用ポリシー
-resource "aws_iam_policy" "ecs_ssm_policy" {
+# SSMパラメータアクセス用ポリシー（既存を参照）
+data "aws_iam_policy" "ecs_ssm_policy" {
+  name = "${var.project_name}-ecs-ssm-policy"
+}
+
+# SSMパラメータアクセス用ポリシー（フォールバック）
+resource "aws_iam_policy" "ecs_ssm_policy_fallback" {
+  count = 0  # 通常は作成しない
   name        = "${var.project_name}-ecs-ssm-policy"
   description = "Policy for ECS to access SSM parameters"
 
@@ -70,10 +89,11 @@ resource "aws_iam_policy" "ecs_ssm_policy" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "ecs_task_ssm_policy" {
-  role       = aws_iam_role.ecs_task_role.name
-  policy_arn = aws_iam_policy.ecs_ssm_policy.arn
-}
+# ポリシーアタッチメントは既存で実行済みと仮定してスキップ
+# resource "aws_iam_role_policy_attachment" "ecs_task_ssm_policy" {
+#   role       = data.aws_iam_role.ecs_task_role.name
+#   policy_arn = data.aws_iam_policy.ecs_ssm_policy.arn
+# }
 
 # GitHub Actions用IAMロール（既存を参照）
 data "aws_iam_role" "github_actions_role" {
