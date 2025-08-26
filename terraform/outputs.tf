@@ -22,7 +22,7 @@ output "redis_endpoint" {
 
 output "name_servers" {
   description = "Name servers for the domain"
-  value       = aws_route53_zone.main.name_servers
+  value       = data.aws_route53_zone.main.name_servers
 }
 
 output "ecr_repository_url_needed" {
