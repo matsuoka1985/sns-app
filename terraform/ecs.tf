@@ -71,6 +71,13 @@ resource "aws_ecs_task_definition" "app" {
       name  = "laravel-app"
       image = var.ecr_repository_url
 
+      portMappings = [
+        {
+          containerPort = 9000
+          protocol      = "tcp"
+        }
+      ]
+
       mountPoints = [
         {
           sourceVolume  = "app-volume"
@@ -114,7 +121,7 @@ resource "aws_ecs_task_definition" "app" {
         },
         {
           name  = "REDIS_HOST"
-          value = aws_elasticache_replication_group.main.primary_endpoint_address
+          value = aws_elasticache_cluster.main.cache_nodes[0].address
         },
         {
           name  = "REDIS_PORT"

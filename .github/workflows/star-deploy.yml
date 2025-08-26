@@ -142,10 +142,10 @@ jobs:
             done
             
             # ElastiCache削除
-            CACHE_IDS=$(aws elasticache describe-replication-groups --query 'ReplicationGroups[?contains(ReplicationGroupId,`sns-app`)].ReplicationGroupId' --output text)
+            CACHE_IDS=$(aws elasticache describe-cache-clusters --query 'CacheClusters[?contains(CacheClusterId,`sns-app`)].CacheClusterId' --output text)
             for cache_id in $CACHE_IDS; do
               echo "Deleting ElastiCache: $cache_id"
-              aws elasticache delete-replication-group --replication-group-id $cache_id || true
+              aws elasticache delete-cache-cluster --cache-cluster-id $cache_id || true
             done
             
             # NAT Gateway削除 (EIP削除前に必要)
@@ -338,10 +338,10 @@ jobs:
           done
           
           # ElastiCache削除 (高優先 - $10-20/月)
-          CACHE_IDS=$(aws elasticache describe-replication-groups --query 'ReplicationGroups[?contains(ReplicationGroupId,`sns-app`)].ReplicationGroupId' --output text)
+          CACHE_IDS=$(aws elasticache describe-cache-clusters --query 'CacheClusters[?contains(CacheClusterId,`sns-app`)].CacheClusterId' --output text)
           for cache_id in $CACHE_IDS; do
             echo "Deleting ElastiCache: $cache_id"
-            aws elasticache delete-replication-group --replication-group-id $cache_id || true
+            aws elasticache delete-cache-cluster --cache-cluster-id $cache_id || true
           done
           
           # ALB削除 (中優先 - $20/月)

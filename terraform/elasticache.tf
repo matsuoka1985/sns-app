@@ -8,32 +8,24 @@ resource "aws_elasticache_subnet_group" "main" {
   }
 }
 
-# ElastiCache Replication Group (Redis)
-resource "aws_elasticache_replication_group" "main" {
-  replication_group_id         = "${var.project_name}-redis"
-  description                  = "Redis cluster for ${var.project_name}"
+# ElastiCache Instance (Redis) - 高速デプロイ用
+resource "aws_elasticache_cluster" "main" {
+  cluster_id           = "${var.project_name}-redis"
+  engine               = "redis"
+  node_type            = "cache.t3.micro"
+  port                 = 6379
+  parameter_group_name = "default.redis7"
+  num_cache_nodes      = 1
   
-  node_type                    = "cache.t3.micro"  # コスト最適化
-  port                         = 6379
-  parameter_group_name         = "default.redis7"
+  subnet_group_name    = aws_elasticache_subnet_group.main.name
+  security_group_ids   = [aws_security_group.redis.id]
   
-  num_cache_clusters           = 1  # シングルノード（コスト削減）
+  # 高速デプロイのため暗号化なし（テスト環境）
+  at_rest_encryption_enabled = false
+  transit_encryption_enabled = false
   
-  subnet_group_name            = aws_elasticache_subnet_group.main.name
-  security_group_ids           = [aws_security_group.redis.id]
-  
-  at_rest_encryption_enabled   = true
-  transit_encryption_enabled   = false  # Laravel Redisクライアントの互換性のため
-  
-  # バックアップ設定
-  snapshot_retention_limit     = 1
-  snapshot_window              = "03:00-05:00"
-  
-  # メンテナンス設定  
-  maintenance_window           = "Mon:05:00-Mon:06:00"
-  
-  # 自動フェイルオーバー無効（シングルノードのため）
-  automatic_failover_enabled   = false
+  # バックアップなし（高速化）
+  snapshot_retention_limit = 0
   
   tags = {
     Name = "${var.project_name}-redis"
