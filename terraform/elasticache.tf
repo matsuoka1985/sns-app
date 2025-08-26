@@ -8,7 +8,7 @@ resource "aws_elasticache_subnet_group" "main" {
   }
 }
 
-# ElastiCache Instance (Redis) - 高速デプロイ用
+# ElastiCache Instance (Redis) - シンプル設定
 resource "aws_elasticache_cluster" "main" {
   cluster_id           = "${var.project_name}-redis"
   engine               = "redis"

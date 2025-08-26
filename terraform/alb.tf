@@ -24,21 +24,21 @@ resource "aws_lb_target_group" "app" {
   health_check {
     enabled             = true
     healthy_threshold   = 2
-    unhealthy_threshold = 2
-    timeout             = 5
     interval            = 30
-    path                = "/api/health"
     matcher             = "200"
+    path                = "/up"
     port                = "traffic-port"
     protocol            = "HTTP"
+    timeout             = 5
+    unhealthy_threshold = 2
   }
 
   tags = {
-    Name = "${var.project_name}-target-group"
+    Name = "${var.project_name}-tg"
   }
 }
 
-# ALB Listener (HTTP -> HTTPS リダイレクト)
+# ALB Listener (HTTP to HTTPS redirect)
 resource "aws_lb_listener" "redirect" {
   load_balancer_arn = aws_lb.main.arn
   port              = "80"
@@ -60,11 +60,13 @@ resource "aws_lb_listener" "app" {
   load_balancer_arn = aws_lb.main.arn
   port              = "443"
   protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-TLS-1-2-2017-01"
-  certificate_arn   = aws_acm_certificate_validation.main.certificate_arn
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = aws_acm_certificate.main.arn
 
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.app.arn
   }
+
+  depends_on = [aws_acm_certificate_validation.main]
 }

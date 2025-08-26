@@ -7,18 +7,16 @@ variable "aws_region" {
 variable "project_name" {
   description = "Project name"
   type        = string
-  default     = "sns-app"
+  default     = "social-app"
 }
 
 variable "domain_name" {
   description = "Domain name for the application"
   type        = string
-  # 実際のドメインに変更する必要があります
-  # example: "yourdomain.com"
 }
 
 variable "environment" {
-  description = "Environment name"
+  description = "Environment"
   type        = string
   default     = "production"
 }
@@ -26,8 +24,6 @@ variable "environment" {
 variable "ecr_repository_url" {
   description = "ECR repository URL for Laravel app"
   type        = string
-  # 事前にECRで作成したリポジトリURL
-  # example: "123456789012.dkr.ecr.ap-northeast-1.amazonaws.com/sns-app"
 }
 
 variable "db_password" {
@@ -51,11 +47,9 @@ variable "firebase_credentials" {
 variable "cors_allowed_origins" {
   description = "CORS allowed origins"
   type        = string
-  # example: "https://yourapp.vercel.app,https://yourdomain.com"
 }
 
 variable "frontend_url" {
   description = "Frontend URL"
   type        = string
-  # example: "https://yourapp.vercel.app"
 }

@@ -4,7 +4,7 @@ data "aws_route53_zone" "main" {
   private_zone = false
 }
 
-# ACM証明書 (us-east-1リージョンで作成する必要がある場合はprovider aliasを使用)
+# ACM証明書
 resource "aws_acm_certificate" "main" {
   domain_name               = "api.${var.domain_name}"
   subject_alternative_names = ["*.${var.domain_name}"]
@@ -19,7 +19,7 @@ resource "aws_acm_certificate" "main" {
   }
 }
 
-# Route 53 レコード (証明書検証用)
+# DNS検証レコード
 resource "aws_route53_record" "cert_validation" {
   for_each = {
     for dvo in aws_acm_certificate.main.domain_validation_options : dvo.domain_name => {
@@ -41,13 +41,13 @@ resource "aws_route53_record" "cert_validation" {
 resource "aws_acm_certificate_validation" "main" {
   certificate_arn         = aws_acm_certificate.main.arn
   validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
-
+  
   timeouts {
-    create = "20m"
+    create = "10m"
   }
 }
 
-# Route 53 A レコード (ALBを指すエイリアス)
+# APIドメインのALIASレコード
 resource "aws_route53_record" "api" {
   zone_id = data.aws_route53_zone.main.zone_id
   name    = "api.${var.domain_name}"

@@ -2,11 +2,7 @@ name: Star-Based Deploy Control
 
 on:
   watch:
-    types: [started]  # Star時のみ（Unstarは検出不可）
-
-# スケジュール実行でStar状態をチェック（Unstar検出のため）
-  # schedule:
-  #   - cron: '*/10 * * * *'  # 10分毎にチェック（コスト削減のため無効化）
+    types: [started]  # Star時のみ
 
   # 手動実行も可能
   workflow_dispatch:
@@ -20,6 +16,7 @@ on:
         - check
         - force_start
         - force_stop
+        - cleanup_all
 
 jobs:
   deploy-control:
@@ -38,45 +35,30 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            // リポジトリのStar数を取得
-            const { data: repo } = await github.rest.repos.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo
-            });
-            
-            const starCount = repo.stargazers_count;
+            const starCount = context.payload.repository?.stargazers_count || 0;
             console.log(`Current star count: ${starCount}`);
             
-            // 前回のStar数と比較（GitHub Actionsの環境変数から取得）
-            const previousStarCount = process.env.PREVIOUS_STAR_COUNT || '0';
-            console.log(`Previous star count: ${previousStarCount}`);
-            
             let action = 'none';
-            if (starCount > parseInt(previousStarCount)) {
+            if (context.eventName === 'watch') {
               action = 'start';
-            } else if (starCount < parseInt(previousStarCount)) {
-              action = 'stop';
-            }
-            
-            // 手動実行の場合
-            if (context.eventName === 'workflow_dispatch') {
-              action = context.payload.inputs.action === 'force_start' ? 'start' : 
-                      context.payload.inputs.action === 'force_stop' ? 'stop' : 'check';
+            } else if (context.eventName === 'workflow_dispatch') {
+              const inputAction = context.payload.inputs.action;
+              if (inputAction === 'force_start') action = 'start';
+              else if (inputAction === 'force_stop' || inputAction === 'cleanup_all') action = 'stop';
             }
             
             core.setOutput('action', action);
             core.setOutput('star_count', starCount);
-            core.setOutput('previous_count', previousStarCount);
 
       - name: Configure AWS credentials
         if: steps.check_star.outputs.action == 'start' || steps.check_star.outputs.action == 'stop'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::709588767777:role/sns-app-github-actions-role
-          role-session-name: sns-app-deploy-session
+          role-session-name: social-app-deploy-session
           aws-region: ap-northeast-1
 
-      - name: Pre-deployment Cleanup
+      - name: Pre-deployment Cleanup (Terraform only)
         if: steps.check_star.outputs.action == 'start'
         run: |
           echo "🧹 Cleaning up existing resources before deployment..."
@@ -91,6 +73,7 @@ jobs:
             -var="cors_allowed_origins=${{ secrets.CORS_ALLOWED_ORIGINS }}" \
             -var="frontend_url=${{ secrets.FRONTEND_URL }}" || echo "No existing resources to destroy"
           cd ..
+          echo "✅ Pre-deployment cleanup completed"
 
       - name: Setup Terraform
         if: steps.check_star.outputs.action == 'start'
@@ -119,26 +102,10 @@ jobs:
             -t ${{ secrets.ECR_REPOSITORY_URL }}:nginx-latest \
             -f docker/nginx/Dockerfile . --push
 
-
       - name: Terraform Init
         if: steps.check_star.outputs.action == 'start'
         working-directory: ./terraform
         run: terraform init
-
-      - name: Check DNS Configuration
-        if: steps.check_star.outputs.action == 'start'
-        run: |
-          echo "🔍 Checking DNS configuration for SSL certificate..."
-          
-          # Route53ネームサーバーを取得
-          NAMESERVERS=$(aws route53 get-hosted-zone --id $(aws route53 list-hosted-zones --query "HostedZones[?Name=='${{ secrets.DOMAIN_NAME }}.'].Id" --output text | cut -d'/' -f3) --query 'DelegationSet.NameServers' --output text)
-          echo "Route53 NameServers: $NAMESERVERS"
-          
-          # DNS伝播確認
-          for ns in $NAMESERVERS; do
-            echo "Checking DNS propagation on $ns"
-            dig @$ns ${{ secrets.DOMAIN_NAME }} SOA +short || true
-          done
 
       - name: Deploy Infrastructure (Star Added)
         if: steps.check_star.outputs.action == 'start'
@@ -169,29 +136,15 @@ jobs:
             -var="firebase_credentials=${{ secrets.FIREBASE_CREDENTIALS }}" \
             -var="cors_allowed_origins=${{ secrets.CORS_ALLOWED_ORIGINS }}" \
             -var="frontend_url=${{ secrets.FRONTEND_URL }}" || true
-          cd ..
-          
-          # ECR images cleanup
-          ECR_REPO_NAME=$(echo "${{ secrets.ECR_REPOSITORY_URL }}" | cut -d'/' -f2)
-          aws ecr batch-delete-image --repository-name $ECR_REPO_NAME --image-ids imageTag=latest || true
-          aws ecr batch-delete-image --repository-name $ECR_REPO_NAME --image-ids imageTag=nginx-latest || true
           
           echo "✅ Cleanup completed"
 
-      - name: Scale ECS Service UP
-        if: steps.check_star.outputs.action == 'start'
-        run: |
-          aws ecs update-service \
-            --cluster sns-app-cluster \
-            --service sns-app-service \
-            --desired-count 1
-
-      - name: Complete Resource Cleanup (Star Removed)
+      - name: Complete Resource Cleanup (Manual or Star Removed)
         if: steps.check_star.outputs.action == 'stop'
         run: |
-          echo "🧹 STAR REMOVED - STARTING COMPLETE RESOURCE CLEANUP 🧹"
+          echo "🧹 STARTING COMPLETE RESOURCE CLEANUP 🧹"
           
-          # Terraform destroy (最優先)
+          # Terraform destroy
           cd terraform
           terraform init || true
           terraform destroy -auto-approve \
@@ -201,151 +154,9 @@ jobs:
             -var="app_key=${{ secrets.APP_KEY }}" \
             -var="firebase_credentials=${{ secrets.FIREBASE_CREDENTIALS }}" \
             -var="cors_allowed_origins=${{ secrets.CORS_ALLOWED_ORIGINS }}" \
-            -var="frontend_url=${{ secrets.FRONTEND_URL }}" || echo "Terraform destroy failed, proceeding with manual cleanup"
+            -var="frontend_url=${{ secrets.FRONTEND_URL }}" || true
           
-          cd ..
-          
-          echo "🧹 Manual cleanup of remaining resources..."
-          
-          # ECRイメージ削除
-          echo "Cleaning up ECR images..."
-          ECR_REPO_NAME=$(echo "${{ secrets.ECR_REPOSITORY_URL }}" | cut -d'/' -f2)
-          aws ecr batch-delete-image --repository-name $ECR_REPO_NAME --image-ids imageTag=latest || true
-          aws ecr batch-delete-image --repository-name $ECR_REPO_NAME --image-ids imageTag=nginx-latest || true
-          
-          # VPC削除とその他のリソース - 緊急クリーンアップと同じ処理
-          VPC_IDS=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=sns-app-vpc" --query 'Vpcs[].VpcId' --output text)
-          for vpc_id in $VPC_IDS; do
-            echo "Found VPC: $vpc_id - Starting deletion..."
-            
-            # ECS Service/Cluster削除
-            aws ecs update-service --cluster sns-app-cluster --service sns-app-service --desired-count 0 || true
-            sleep 30
-            aws ecs delete-service --cluster sns-app-cluster --service sns-app-service --force || true
-            aws ecs delete-cluster --cluster sns-app-cluster || true
-            
-            # RDS削除 (高優先 - $15-30/月)
-            RDS_IDS=$(aws rds describe-db-instances --query 'DBInstances[?contains(DBInstanceIdentifier,`sns-app`)].DBInstanceIdentifier' --output text)
-            for rds_id in $RDS_IDS; do
-              echo "Deleting RDS instance: $rds_id"
-              aws rds delete-db-instance --db-instance-identifier $rds_id --skip-final-snapshot --delete-automated-backups || true
-            done
-            
-            # ElastiCache削除 (高優先 - $10-20/月)
-            CACHE_IDS=$(aws elasticache describe-cache-clusters --query 'CacheClusters[?contains(CacheClusterId,`sns-app`)].CacheClusterId' --output text)
-            for cache_id in $CACHE_IDS; do
-              echo "Deleting ElastiCache: $cache_id"
-              aws elasticache delete-cache-cluster --cache-cluster-id $cache_id || true
-            done
-            
-            # ALB削除 (中優先 - $20/月)
-            ALB_ARNS=$(aws elbv2 describe-load-balancers --query 'LoadBalancers[?contains(LoadBalancerName,`sns-app`)].LoadBalancerArn' --output text)
-            for alb_arn in $ALB_ARNS; do
-              echo "Deleting ALB: $alb_arn"
-              aws elbv2 delete-load-balancer --load-balancer-arn $alb_arn || true
-            done
-            
-            # Target Groups削除
-            TG_ARNS=$(aws elbv2 describe-target-groups --query 'TargetGroups[?contains(TargetGroupName,`sns-app`)].TargetGroupArn' --output text)
-            for tg_arn in $TG_ARNS; do
-              echo "Deleting Target Group: $tg_arn"
-              aws elbv2 delete-target-group --target-group-arn $tg_arn || true
-            done
-            
-            # NAT Gateway削除 (最高優先 - $45/月)
-            NAT_IDS=$(aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$vpc_id" --query 'NatGateways[?State==`available`].NatGatewayId' --output text)
-            for nat_id in $NAT_IDS; do
-              echo "Deleting NAT Gateway: $nat_id"
-              aws ec2 delete-nat-gateway --nat-gateway-id $nat_id || true
-            done
-            
-            # ENIの強制削除
-            ENI_IDS=$(aws ec2 describe-network-interfaces --filters "Name=vpc-id,Values=$vpc_id" --query 'NetworkInterfaces[].NetworkInterfaceId' --output text)
-            for eni_id in $ENI_IDS; do
-              echo "Force detaching ENI: $eni_id"
-              aws ec2 detach-network-interface --network-interface-id $eni_id --force || true
-              sleep 5
-              aws ec2 delete-network-interface --network-interface-id $eni_id || true
-            done
-            
-            echo "Waiting for resource cleanup to complete..."
-            sleep 60
-            
-            # VPC内のサブネット削除
-            SUBNET_IDS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$vpc_id" --query 'Subnets[].SubnetId' --output text)
-            for subnet_id in $SUBNET_IDS; do
-              echo "Deleting subnet: $subnet_id"
-              aws ec2 delete-subnet --subnet-id $subnet_id || true
-            done
-            
-            # インターネットゲートウェイ削除
-            IGW_IDS=$(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=$vpc_id" --query 'InternetGateways[].InternetGatewayId' --output text)
-            for igw_id in $IGW_IDS; do
-              echo "Detaching and deleting IGW: $igw_id"
-              aws ec2 detach-internet-gateway --internet-gateway-id $igw_id --vpc-id $vpc_id || true
-              aws ec2 delete-internet-gateway --internet-gateway-id $igw_id || true
-            done
-            
-            # ルートテーブル削除 (デフォルト以外)
-            RT_IDS=$(aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$vpc_id" --query 'RouteTables[?Associations[0].Main != `true`].RouteTableId' --output text)
-            for rt_id in $RT_IDS; do
-              echo "Deleting route table: $rt_id"
-              aws ec2 delete-route-table --route-table-id $rt_id || true
-            done
-            
-            # セキュリティグループ削除 (デフォルト以外)
-            SG_IDS=$(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$vpc_id" --query 'SecurityGroups[?GroupName!=`default`].GroupId' --output text)
-            for sg_id in $SG_IDS; do
-              echo "Deleting security group: $sg_id"
-              aws ec2 delete-security-group --group-id $sg_id || true
-            done
-            
-            # VPC削除
-            echo "Finally deleting VPC: $vpc_id"
-            aws ec2 delete-vpc --vpc-id $vpc_id || true
-          done
-          
-          # EIP削除 (NAT Gateway削除後)
-          sleep 60
-          EIP_IDS=$(aws ec2 describe-addresses --query 'Addresses[?contains(to_string(Tags),`sns-app`)].AllocationId' --output text)
-          for eip_id in $EIP_IDS; do
-            echo "Releasing EIP: $eip_id"
-            aws ec2 release-address --allocation-id $eip_id || true
-          done
-          
-          # CloudWatch Logs削除
-          aws logs delete-log-group --log-group-name /ecs/sns-app || true
-          aws logs delete-log-group --log-group-name /ecs/sns-app-nginx || true
-          
-          # ElastiCache/RDS Subnet Group削除
-          aws elasticache delete-cache-subnet-group --cache-subnet-group-name sns-app-cache-subnet || true
-          aws rds delete-db-subnet-group --db-subnet-group-name sns-app-db-subnet-group || true
-          
-          # SSMパラメータ削除
-          aws ssm delete-parameter --name /sns-app/app_key || true
-          aws ssm delete-parameter --name /sns-app/db_password || true
-          aws ssm delete-parameter --name /sns-app/firebase_credentials || true
-          
-          # Route53レコード削除
-          echo "Cleaning up Route53 records..."
-          HOSTED_ZONE_ID=$(aws route53 list-hosted-zones --query "HostedZones[?Name=='${{ secrets.DOMAIN_NAME }}.'].Id" --output text | cut -d'/' -f3)
-          if [ ! -z "$HOSTED_ZONE_ID" ]; then
-            EXISTING_RECORD=$(aws route53 list-resource-record-sets --hosted-zone-id $HOSTED_ZONE_ID --query "ResourceRecordSets[?Name=='api.${{ secrets.DOMAIN_NAME }}.' && Type=='A']" --output json)
-            if [ "$EXISTING_RECORD" != "[]" ]; then
-              echo "Found existing A record, deleting..."
-              aws route53 change-resource-record-sets --hosted-zone-id $HOSTED_ZONE_ID --change-batch "{\"Changes\":[{\"Action\":\"DELETE\",\"ResourceRecordSet\":$(echo $EXISTING_RECORD | jq '.[0]')}]}" || true
-            fi
-          fi
-          
-          # ACM証明書削除
-          echo "Cleaning up ACM certificates..."
-          CERT_ARNS=$(aws acm list-certificates --query 'CertificateSummaryList[?contains(DomainName,`api.${{ secrets.DOMAIN_NAME }}`)].CertificateArn' --output text)
-          for cert_arn in $CERT_ARNS; do
-            echo "Deleting certificate: $cert_arn"
-            aws acm delete-certificate --certificate-arn $cert_arn || true
-          done
-          
-          echo "✅ Complete cleanup finished - All resources deleted!"
+          echo "✅ Complete cleanup finished"
 
       - name: Get Infrastructure Info
         if: steps.check_star.outputs.action == 'start'
@@ -357,45 +168,13 @@ jobs:
           echo "alb_dns=$ALB_DNS" >> $GITHUB_OUTPUT
           echo "api_domain=$API_DOMAIN" >> $GITHUB_OUTPUT
 
-      - name: Create Issue (Cleanup Required)
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const title = `⚠️ デプロイ失敗 - リソースクリーンアップ確認要`;
-            const body = `❌ **デプロイが失敗しました**
-            
-            **自動クリーンアップ実行済み**
-            ただし、AWS Console で以下を手動確認してください：
-            
-            **確認すべきリソース:**
-            - NAT Gateway (課金発生)
-            - EIP (Elastic IP)
-            - VPC
-            - ECS Cluster
-            - RDS Instance
-            
-            **手動削除が必要な場合:**
-            AWS Console > CloudFormation または各サービス画面で削除
-            
-            ---
-            *コスト発生を防ぐため、速やかに確認してください*`;
-            
-            github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: title,
-              body: body,
-              labels: ['deployment-failed', 'cleanup-required', 'urgent']
-            });
-
       - name: Create Issue (Deploy Started)
         if: steps.check_star.outputs.action == 'start'
         uses: actions/github-script@v7
         with:
           script: |
-            const title = `🚀 アプリケーション起動中... (Star数: ${{ steps.check_star.outputs.star_count }})`;
-            const body = `⭐ **Starありがとうございます！アプリケーションをデプロイ中です**
+            const title = `🚀 Social App デプロイ開始! (Star数: ${{ steps.check_star.outputs.star_count }})`;
+            const body = `⭐ **Starありがとうございます！Social Appをデプロイ中です**
             
             **📊 デプロイ情報:**
             - Star数: ${{ steps.check_star.outputs.star_count }}
@@ -408,10 +187,9 @@ jobs:
             - 🌐 SSL証明書: 設定中
             
             **🛑 停止方法:**
-            リポジトリページで⭐Starを外してください
+            Actions → Star-Based Deploy Control → Run workflow → cleanup_all
             
-            ---
-            *この Issue は10分後に自動的にクローズされます*`;
+            🤖 Generated with [Claude Code](https://claude.ai/code)`;
             
             github.rest.issues.create({
               owner: context.repo.owner,
@@ -421,43 +199,35 @@ jobs:
               labels: ['deployment', 'auto-generated']
             });
 
-      - name: Create Issue (App Stopped)
+      - name: Create Issue (Cleanup Completed)
         if: steps.check_star.outputs.action == 'stop'
         uses: actions/github-script@v7
         with:
           script: |
-            const title = `⏹️ アプリケーション停止 (Star数: ${{ steps.check_star.outputs.star_count }})`;
-            const body = `**🛑 アプリケーションを停止しました**
+            const title = `🧹 Social App リソース削除完了`;
+            const body = `**🛑 全リソースを削除しました**
             
-            **📊 現在の状況:**
-            - Star数: ${{ steps.check_star.outputs.star_count }}
-            - ECSタスク数: 0 (停止状態)
-            - インフラ: 維持中
+            **📊 削除されたリソース:**
+            - ECS Cluster/Service/Task Definition
+            - ALB/Target Group
+            - VPC/Subnets/NAT Gateway/EIP
+            - RDS Instance
+            - ElastiCache Cluster
+            - Route53 Records
+            - ACM Certificate
+            - SSM Parameters
+            - CloudWatch Log Groups
             
             **💰 コスト削減:**
-            - ECS Fargate課金: 停止 ✅
-            - RDS/ElastiCache: 継続中（低コスト）
+            - 高額リソース（NAT Gateway等）: 削除完了 ✅
+            - 全てのインフラリソース: 削除完了 ✅
             
-            **🚀 再起動方法:**
-            リポジトリページで⭐Starを付けてください
-            
-            ---
-            *この Issue は10分後に自動的にクローズされます*`;
+            🤖 Generated with [Claude Code](https://claude.ai/code)`;
             
             github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: title,
               body: body,
-              labels: ['deployment', 'auto-generated']
+              labels: ['cleanup', 'auto-generated']
             });
-
-      - name: Update Star Count Record
-        uses: actions/github-script@v7
-        with:
-          script: |
-            // Star数を記録（次回比較用）
-            // 実際の実装では、GitHub Secretsまたは外部ストレージに保存
-            console.log(`Recorded star count: ${{ steps.check_star.outputs.star_count }}`);
-        env:
-          PREVIOUS_STAR_COUNT: ${{ steps.check_star.outputs.star_count }}
