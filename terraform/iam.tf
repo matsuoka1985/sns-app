@@ -21,8 +21,25 @@ data "aws_iam_role" "github_actions_role" {
 # Current AWS account data
 data "aws_caller_identity" "current" {}
 
-# ECSタスク実行ロールにSSMパラメータ取得用ポリシーをアタッチ（既に設定済みなので冪等性確保）
-resource "aws_iam_role_policy_attachment" "ecs_execution_attach_ssm" {
-  role       = data.aws_iam_role.ecs_execution_role.name
-  policy_arn = data.aws_iam_policy.ecs_ssm_policy.arn
+# ECSタスク実行ロール用のSSMアクセスポリシー（インライン作成）
+resource "aws_iam_role_policy" "ecs_execution_ssm_access" {
+  name = "social-app-ecs-execution-ssm-access"
+  role = data.aws_iam_role.ecs_execution_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameters",
+          "ssm:GetParameter",
+          "ssm:GetParametersByPath"
+        ]
+        Resource = [
+          "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/*"
+        ]
+      }
+    ]
+  })
 }
