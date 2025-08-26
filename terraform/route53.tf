@@ -1,11 +1,7 @@
-# Route 53 Hosted Zone (既存ドメインの場合はdata sourceを使用)
-# 新規ドメインの場合
-resource "aws_route53_zone" "main" {
-  name = var.domain_name
-
-  tags = {
-    Name = "${var.project_name}-hosted-zone"
-  }
+# Route 53 Hosted Zone (既存ドメインを参照)
+data "aws_route53_zone" "main" {
+  name         = var.domain_name
+  private_zone = false
 }
 
 # ACM証明書 (us-east-1リージョンで作成する必要がある場合はprovider aliasを使用)
@@ -38,7 +34,7 @@ resource "aws_route53_record" "cert_validation" {
   records         = [each.value.record]
   ttl             = 60
   type            = each.value.type
-  zone_id         = aws_route53_zone.main.zone_id
+  zone_id         = data.aws_route53_zone.main.zone_id
 }
 
 # ACM証明書の検証
@@ -53,7 +49,7 @@ resource "aws_acm_certificate_validation" "main" {
 
 # Route 53 A レコード (ALBを指すエイリアス)
 resource "aws_route53_record" "api" {
-  zone_id = aws_route53_zone.main.zone_id
+  zone_id = data.aws_route53_zone.main.zone_id
   name    = "api.${var.domain_name}"
   type    = "A"
 
