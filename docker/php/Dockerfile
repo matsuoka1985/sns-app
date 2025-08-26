@@ -100,6 +100,10 @@ RUN chmod -R ug+rwx storage bootstrap/cache \
 # ヘルスチェック用エンドポイント
 RUN echo '<?php echo "OK";' > /var/www/public/health
 
+# 起動スクリプトの権限をwww-dataでも実行可能に設定
+RUN chown www-data:www-data /usr/local/bin/start.sh \
+    && chmod +x /usr/local/bin/start.sh
+
 USER www-data
 
 EXPOSE 9000
