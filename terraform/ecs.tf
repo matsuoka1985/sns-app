@@ -25,13 +25,57 @@ resource "aws_ecs_task_definition" "app" {
 
   container_definitions = jsonencode([
     {
-      name  = "laravel-app"
-      image = var.ecr_repository_url
+      name  = "nginx"
+      image = "${var.ecr_repository_url}:nginx-latest"
 
       portMappings = [
         {
           containerPort = 80
           protocol      = "tcp"
+        }
+      ]
+
+      mountPoints = [
+        {
+          sourceVolume  = "app-volume"
+          containerPath = "/var/www"
+          readOnly      = false
+        }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.nginx.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "nginx"
+        }
+      }
+
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -f http://localhost/up || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 60
+      }
+
+      dependsOn = [
+        {
+          containerName = "laravel-app"
+          condition     = "START"
+        }
+      ]
+    },
+    {
+      name  = "laravel-app"
+      image = var.ecr_repository_url
+
+      mountPoints = [
+        {
+          sourceVolume  = "app-volume"
+          containerPath = "/var/www"
+          readOnly      = false
         }
       ]
 
@@ -114,19 +158,15 @@ resource "aws_ecs_task_definition" "app" {
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.app.name
           "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "ecs"
+          "awslogs-stream-prefix" = "laravel"
         }
-      }
-
-      healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost/api/health || exit 1"]
-        interval    = 30
-        timeout     = 5
-        retries     = 3
-        startPeriod = 60
       }
     }
   ])
+
+  volume {
+    name = "app-volume"
+  }
 
   tags = {
     Name = "${var.project_name}-task-definition"
@@ -166,5 +206,14 @@ resource "aws_cloudwatch_log_group" "app" {
 
   tags = {
     Name = "${var.project_name}-logs"
+  }
+}
+
+resource "aws_cloudwatch_log_group" "nginx" {
+  name              = "/ecs/${var.project_name}-nginx"
+  retention_in_days = 7
+
+  tags = {
+    Name = "${var.project_name}-nginx-logs"
   }
 }
