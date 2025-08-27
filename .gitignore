@@ -50,3 +50,6 @@ terraform/.terraform.lock.hcl
 terraform/terraform.tfstate*
 terraform/terraform.tfvars
 terraform/plan.out
+
+# Reference directory (not part of the project)
+AWS_Container_App_HCL-main/
