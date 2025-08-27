@@ -3,7 +3,7 @@
 
 # S3 bucket for terraform state
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "social-app-terraform-state-bucket"
+  bucket = "social-app-terraform-state-bucket-apne1"
 
   # 削除保護（重要なstateファイルのため）
   lifecycle {
