@@ -43,3 +43,10 @@ backend/bootstrap/cache/
 frontend/.nuxt/
 frontend/.output/
 frontend/dist/
+
+# Terraform
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate*
+terraform/terraform.tfvars
+terraform/plan.out
