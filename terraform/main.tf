@@ -7,13 +7,13 @@ terraform {
     }
   }
   
-  # backend "s3" {
-  #   bucket         = "social-app-terraform-state-bucket"
-  #   key            = "terraform/state"
-  #   region         = "ap-northeast-1"
-  #   dynamodb_table = "social-app-terraform-locks"
-  #   encrypt        = true
-  # }
+  backend "s3" {
+    bucket         = "social-app-terraform-state-bucket"
+    key            = "terraform/state"
+    region         = "ap-northeast-1"
+    dynamodb_table = "social-app-terraform-locks"
+    encrypt        = true
+  }
 }
 
 provider "aws" {
