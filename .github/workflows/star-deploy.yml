@@ -74,23 +74,34 @@ jobs:
           # まずローカルバックエンドで初期化
           terraform init
           
-          # バックエンドリソース（S3バケット、DynamoDBテーブル）のみ作成
-          echo "Creating backend resources with local state..."
-          terraform apply -target=aws_s3_bucket.terraform_state \
-            -target=aws_s3_bucket_versioning.terraform_state \
-            -target=aws_s3_bucket_server_side_encryption_configuration.terraform_state \
-            -target=aws_s3_bucket_public_access_block.terraform_state \
-            -target=aws_dynamodb_table.terraform_locks \
-            -auto-approve \
-            -var="domain_name=${{ secrets.DOMAIN_NAME }}" \
-            -var="ecr_repository_url=${{ secrets.ECR_REPOSITORY_URL }}" \
-            -var="db_password=${{ secrets.DB_PASSWORD }}" \
-            -var="app_key=${{ secrets.APP_KEY }}" \
-            -var="firebase_credentials=${{ secrets.FIREBASE_CREDENTIALS }}" \
-            -var="cors_allowed_origins=${{ secrets.CORS_ALLOWED_ORIGINS }}" \
-            -var="frontend_url=${{ secrets.FRONTEND_URL }}" || echo "Backend resources already exist"
+          # S3バケットの存在確認
+          BUCKET_EXISTS=$(aws s3api head-bucket --bucket "social-app-terraform-state-bucket-apne1" 2>/dev/null && echo "true" || echo "false")
+          echo "S3 bucket exists: $BUCKET_EXISTS"
           
-          # S3バケットとDynamoDBテーブルが作成されたので、リモートバックエンドに移行
+          # DynamoDBテーブルの存在確認
+          DYNAMODB_EXISTS=$(aws dynamodb describe-table --table-name "social-app-terraform-locks" 2>/dev/null && echo "true" || echo "false")
+          echo "DynamoDB table exists: $DYNAMODB_EXISTS"
+          
+          if [ "$BUCKET_EXISTS" = "false" ] || [ "$DYNAMODB_EXISTS" = "false" ]; then
+            echo "Creating backend resources with local state..."
+            terraform apply -target=aws_s3_bucket.terraform_state \
+              -target=aws_s3_bucket_versioning.terraform_state \
+              -target=aws_s3_bucket_server_side_encryption_configuration.terraform_state \
+              -target=aws_s3_bucket_public_access_block.terraform_state \
+              -target=aws_dynamodb_table.terraform_locks \
+              -auto-approve \
+              -var="domain_name=${{ secrets.DOMAIN_NAME }}" \
+              -var="ecr_repository_url=${{ secrets.ECR_REPOSITORY_URL }}" \
+              -var="db_password=${{ secrets.DB_PASSWORD }}" \
+              -var="app_key=${{ secrets.APP_KEY }}" \
+              -var="firebase_credentials=${{ secrets.FIREBASE_CREDENTIALS }}" \
+              -var="cors_allowed_origins=${{ secrets.CORS_ALLOWED_ORIGINS }}" \
+              -var="frontend_url=${{ secrets.FRONTEND_URL }}"
+          else
+            echo "Backend resources already exist, skipping creation..."
+          fi
+          
+          # S3バケットとDynamoDBテーブルが存在することを確認してから、リモートバックエンドに移行
           echo "🔄 Migrating to remote backend..."
           
           # main.tfのバックエンド設定を有効化
@@ -102,7 +113,13 @@ jobs:
           sed -i 's/#   encrypt/  encrypt/' main.tf
           sed -i 's/# }/}/' main.tf
           
+          # バックエンド設定が有効化されたことを確認
+          echo "Updated main.tf backend configuration:"
+          grep -A 10 "backend \"s3\"" main.tf
+          
           # リモートバックエンドで再初期化（状態をS3に移行）
+          # バケットが存在することを確認してから実行
+          sleep 10  # S3の整合性を待つ
           echo "yes" | terraform init -migrate-state || echo "State migration completed or already done"
 
       - name: Pre-deployment Cleanup (Terraform only)
