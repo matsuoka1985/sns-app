@@ -81,9 +81,10 @@ RUN echo '#!/bin/bash' > /usr/local/bin/start.sh \
     && echo 'php artisan migrate --force' >> /usr/local/bin/start.sh \
     && echo 'php artisan db:seed --force' >> /usr/local/bin/start.sh \
     && echo '' >> /usr/local/bin/start.sh \
-    && echo '# PHP-FPM起動' >> /usr/local/bin/start.sh \
+    && echo '# PHP-FMP起動' >> /usr/local/bin/start.sh \
     && echo 'exec php-fpm' >> /usr/local/bin/start.sh \
-    && chmod +x /usr/local/bin/start.sh
+    && chmod +x /usr/local/bin/start.sh \
+    && chown www-data:www-data /usr/local/bin/start.sh
 
 # Laravel最適化（セットアップ後に実行）
 RUN php artisan config:cache \
@@ -100,9 +101,7 @@ RUN chmod -R ug+rwx storage bootstrap/cache \
 # ヘルスチェック用エンドポイント
 RUN echo '<?php echo "OK";' > /var/www/public/health
 
-# 起動スクリプトの権限をwww-dataでも実行可能に設定
-RUN chown www-data:www-data /usr/local/bin/start.sh \
-    && chmod +x /usr/local/bin/start.sh
+# 権限設定は既に上で実行済み
 
 USER www-data
 
