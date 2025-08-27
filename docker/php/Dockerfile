@@ -67,24 +67,9 @@ RUN cp .env.example .env
 # Firebase認証情報ファイル作成（環境変数から）
 RUN mkdir -p storage/app/firebase
 
-# 起動スクリプト作成
-RUN echo '#!/bin/bash' > /usr/local/bin/start.sh \
-    && echo 'set -e' >> /usr/local/bin/start.sh \
-    && echo '' >> /usr/local/bin/start.sh \
-    && echo '# Firebase認証情報ファイル作成' >> /usr/local/bin/start.sh \
-    && echo 'if [ ! -z "$FIREBASE_CREDENTIALS" ]; then' >> /usr/local/bin/start.sh \
-    && echo '  echo "$FIREBASE_CREDENTIALS" | base64 -d > /var/www/storage/app/firebase/firebase-adminsdk.json' >> /usr/local/bin/start.sh \
-    && echo '  echo "Firebase credentials file created"' >> /usr/local/bin/start.sh \
-    && echo 'fi' >> /usr/local/bin/start.sh \
-    && echo '' >> /usr/local/bin/start.sh \
-    && echo '# マイグレーション実行' >> /usr/local/bin/start.sh \
-    && echo 'php artisan migrate --force' >> /usr/local/bin/start.sh \
-    && echo 'php artisan db:seed --force' >> /usr/local/bin/start.sh \
-    && echo '' >> /usr/local/bin/start.sh \
-    && echo '# PHP-FMP起動' >> /usr/local/bin/start.sh \
-    && echo 'exec php-fpm' >> /usr/local/bin/start.sh \
-    && chmod +x /usr/local/bin/start.sh \
-    && chown www-data:www-data /usr/local/bin/start.sh
+# 起動スクリプトをコピー
+COPY docker/php/start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh
 
 # Laravel最適化（セットアップ後に実行）
 RUN php artisan config:cache \
