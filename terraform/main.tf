@@ -7,7 +7,7 @@ terraform {
     }
   }
   
-  # 初回デプロイ時はローカルバックエンド、S3バケット作成後にリモートバックエンドに移行
+  # S3バックエンドの設定（初回はコメントアウト）
   # backend "s3" {
   #   bucket         = "social-app-terraform-state-bucket-apne1"
   #   key            = "terraform/state"
@@ -64,7 +64,7 @@ resource "aws_subnet" "public_b" {
   }
 }
 
-# Private Subnets (ECS, RDS用)
+# Private Subnets (ECS用)
 resource "aws_subnet" "private_a" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.10.0/24"
@@ -85,16 +85,40 @@ resource "aws_subnet" "private_b" {
   }
 }
 
-# NAT Gateway (プライベートサブネットからのインターネット接続用)
-resource "aws_eip" "nat" {
-  domain = "vpc"
+# Database Subnets
+resource "aws_subnet" "db_a" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.20.0/24"
+  availability_zone = "${var.aws_region}a"
+
   tags = {
-    Name = "${var.project_name}-nat-eip"
+    Name = "${var.project_name}-db-subnet-a"
   }
 }
 
+resource "aws_subnet" "db_b" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.21.0/24"
+  availability_zone = "${var.aws_region}c"
+
+  tags = {
+    Name = "${var.project_name}-db-subnet-b"
+  }
+}
+
+# NAT Gateway用のEIP
+resource "aws_eip" "nat_a" {
+  domain = "vpc"
+  depends_on = [aws_internet_gateway.main]
+  
+  tags = {
+    Name = "${var.project_name}-nat-eip-a"
+  }
+}
+
+# NAT Gateway (コスト削減のため1つのみ)
 resource "aws_nat_gateway" "main" {
-  allocation_id = aws_eip.nat.id
+  allocation_id = aws_eip.nat_a.id
   subnet_id     = aws_subnet.public_a.id
 
   tags = {
@@ -131,6 +155,14 @@ resource "aws_route_table" "private" {
   }
 }
 
+resource "aws_route_table" "db" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "${var.project_name}-db-rt"
+  }
+}
+
 # Route Table Associations
 resource "aws_route_table_association" "public_a" {
   subnet_id      = aws_subnet.public_a.id
@@ -150,4 +182,14 @@ resource "aws_route_table_association" "private_a" {
 resource "aws_route_table_association" "private_b" {
   subnet_id      = aws_subnet.private_b.id
   route_table_id = aws_route_table.private.id
+}
+
+resource "aws_route_table_association" "db_a" {
+  subnet_id      = aws_subnet.db_a.id
+  route_table_id = aws_route_table.db.id
+}
+
+resource "aws_route_table_association" "db_b" {
+  subnet_id      = aws_subnet.db_b.id
+  route_table_id = aws_route_table.db.id
 }

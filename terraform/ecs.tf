@@ -12,77 +12,36 @@ resource "aws_ecs_cluster" "main" {
   }
 }
 
+# CloudWatch Log Group
+resource "aws_cloudwatch_log_group" "app" {
+  name              = "/ecs/${var.project_name}"
+  retention_in_days = 14
+
+  tags = {
+    Name = "${var.project_name}-log-group"
+  }
+}
+
 # ECS Task Definition
 resource "aws_ecs_task_definition" "app" {
-  family                   = "${var.project_name}-app"
+  family                   = "${var.project_name}-task"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "256"  # 0.25 vCPU
-  memory                   = "512"  # 512 MB
-
-  execution_role_arn = data.aws_iam_role.ecs_execution_role.arn
-  task_role_arn      = data.aws_iam_role.ecs_task_role.arn
+  cpu                      = "512"
+  memory                   = "1024"
+  execution_role_arn       = aws_iam_role.ecs_execution_role.arn
+  task_role_arn           = aws_iam_role.ecs_task_role.arn
 
   container_definitions = jsonencode([
     {
-      name  = "nginx"
-      image = "${var.ecr_repository_url}:nginx-latest"
-
+      name      = "app"
+      image     = var.ecr_repository_url
+      essential = true
+      
       portMappings = [
         {
           containerPort = 80
           protocol      = "tcp"
-        }
-      ]
-
-      mountPoints = [
-        {
-          sourceVolume  = "app-volume"
-          containerPath = "/var/www"
-          readOnly      = false
-        }
-      ]
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.nginx.name
-          "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "nginx"
-        }
-      }
-
-      healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost/up || exit 1"]
-        interval    = 30
-        timeout     = 5
-        retries     = 3
-        startPeriod = 60
-      }
-
-      dependsOn = [
-        {
-          containerName = "laravel-app"
-          condition     = "START"
-        }
-      ]
-    },
-    {
-      name  = "laravel-app"
-      image = var.ecr_repository_url
-
-      portMappings = [
-        {
-          containerPort = 9000
-          protocol      = "tcp"
-        }
-      ]
-
-      mountPoints = [
-        {
-          sourceVolume  = "app-volume"
-          containerPath = "/var/www"
-          readOnly      = false
         }
       ]
 
@@ -94,10 +53,6 @@ resource "aws_ecs_task_definition" "app" {
         {
           name  = "APP_DEBUG"
           value = "false"
-        },
-        {
-          name  = "APP_URL"
-          value = "https://api.${var.domain_name}"
         },
         {
           name  = "DB_CONNECTION"
@@ -113,11 +68,7 @@ resource "aws_ecs_task_definition" "app" {
         },
         {
           name  = "DB_DATABASE"
-          value = "laravel_db"
-        },
-        {
-          name  = "DB_USERNAME"
-          value = "admin"
+          value = aws_db_instance.main.db_name
         },
         {
           name  = "REDIS_HOST"
@@ -126,14 +77,6 @@ resource "aws_ecs_task_definition" "app" {
         {
           name  = "REDIS_PORT"
           value = "6379"
-        },
-        {
-          name  = "CACHE_STORE"
-          value = "redis"
-        },
-        {
-          name  = "SESSION_DRIVER"
-          value = "redis"
         },
         {
           name  = "CORS_ALLOWED_ORIGINS"
@@ -151,6 +94,10 @@ resource "aws_ecs_task_definition" "app" {
           valueFrom = aws_ssm_parameter.app_key.arn
         },
         {
+          name      = "DB_USERNAME"
+          valueFrom = aws_ssm_parameter.db_username.arn
+        },
+        {
           name      = "DB_PASSWORD"
           valueFrom = aws_ssm_parameter.db_password.arn
         },
@@ -165,62 +112,40 @@ resource "aws_ecs_task_definition" "app" {
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.app.name
           "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "laravel"
+          "awslogs-stream-prefix" = "ecs"
         }
       }
     }
   ])
 
-  volume {
-    name = "app-volume"
-  }
-
   tags = {
-    Name = "${var.project_name}-task-definition"
+    Name = "${var.project_name}-task"
   }
 }
 
 # ECS Service
-resource "aws_ecs_service" "app" {
+resource "aws_ecs_service" "main" {
   name            = "${var.project_name}-service"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.app.arn
-  desired_count   = 1
+  desired_count   = 2
   launch_type     = "FARGATE"
 
   network_configuration {
+    security_groups  = [aws_security_group.ecs_tasks.id]
     subnets         = [aws_subnet.private_a.id, aws_subnet.private_b.id]
-    security_groups = [aws_security_group.ecs.id]
+    assign_public_ip = false
   }
 
   load_balancer {
     target_group_arn = aws_lb_target_group.app.arn
-    container_name   = "nginx"
+    container_name   = "app"
     container_port   = 80
   }
 
-  depends_on = [aws_lb_listener.app]
+  depends_on = [aws_lb_listener.https]
 
   tags = {
     Name = "${var.project_name}-service"
-  }
-}
-
-# CloudWatch Log Group
-resource "aws_cloudwatch_log_group" "app" {
-  name              = "/ecs/${var.project_name}"
-  retention_in_days = 7
-
-  tags = {
-    Name = "${var.project_name}-logs"
-  }
-}
-
-resource "aws_cloudwatch_log_group" "nginx" {
-  name              = "/ecs/${var.project_name}-nginx"
-  retention_in_days = 7
-
-  tags = {
-    Name = "${var.project_name}-nginx-logs"
   }
 }

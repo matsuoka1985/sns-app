@@ -1,12 +1,10 @@
-# Security Groups
-
-# ALB用セキュリティグループ
+# Security Group for ALB
 resource "aws_security_group" "alb" {
-  name_prefix = "${var.project_name}-alb-"
+  name        = "${var.project_name}-alb-sg"
+  description = "Security group for ALB"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "HTTP"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -14,7 +12,6 @@ resource "aws_security_group" "alb" {
   }
 
   ingress {
-    description = "HTTPS"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
@@ -33,23 +30,15 @@ resource "aws_security_group" "alb" {
   }
 }
 
-# ECS用セキュリティグループ
-resource "aws_security_group" "ecs" {
-  name_prefix = "${var.project_name}-ecs-"
+# Security Group for ECS Tasks
+resource "aws_security_group" "ecs_tasks" {
+  name        = "${var.project_name}-ecs-tasks-sg"
+  description = "Security group for ECS tasks"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description     = "HTTP from ALB"
     from_port       = 80
     to_port         = 80
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
-
-  ingress {
-    description     = "PHP-FPM from ALB"
-    from_port       = 9000
-    to_port         = 9000
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
   }
@@ -62,21 +51,21 @@ resource "aws_security_group" "ecs" {
   }
 
   tags = {
-    Name = "${var.project_name}-ecs-sg"
+    Name = "${var.project_name}-ecs-tasks-sg"
   }
 }
 
-# RDS用セキュリティグループ
+# Security Group for RDS
 resource "aws_security_group" "rds" {
-  name_prefix = "${var.project_name}-rds-"
+  name        = "${var.project_name}-rds-sg"
+  description = "Security group for RDS"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description     = "MySQL from ECS"
     from_port       = 3306
     to_port         = 3306
     protocol        = "tcp"
-    security_groups = [aws_security_group.ecs.id]
+    security_groups = [aws_security_group.ecs_tasks.id]
   }
 
   egress {
@@ -91,17 +80,17 @@ resource "aws_security_group" "rds" {
   }
 }
 
-# Redis用セキュリティグループ
-resource "aws_security_group" "redis" {
-  name_prefix = "${var.project_name}-redis-"
+# Security Group for ElastiCache (Redis)
+resource "aws_security_group" "elasticache" {
+  name        = "${var.project_name}-elasticache-sg"
+  description = "Security group for ElastiCache"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description     = "Redis from ECS"
     from_port       = 6379
     to_port         = 6379
     protocol        = "tcp"
-    security_groups = [aws_security_group.ecs.id]
+    security_groups = [aws_security_group.ecs_tasks.id]
   }
 
   egress {
@@ -112,6 +101,6 @@ resource "aws_security_group" "redis" {
   }
 
   tags = {
-    Name = "${var.project_name}-redis-sg"
+    Name = "${var.project_name}-elasticache-sg"
   }
 }
