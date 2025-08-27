@@ -70,8 +70,12 @@ jobs:
         run: |
           echo "🏗️ Setting up Terraform backend resources..."
           cd terraform
+          
+          # まずローカルバックエンドで初期化
           terraform init
-          # バックエンドリソースのみ作成（一度だけ実行される）
+          
+          # バックエンドリソース（S3バケット、DynamoDBテーブル）のみ作成
+          echo "Creating backend resources with local state..."
           terraform apply -target=aws_s3_bucket.terraform_state \
             -target=aws_s3_bucket_versioning.terraform_state \
             -target=aws_s3_bucket_server_side_encryption_configuration.terraform_state \
@@ -86,19 +90,20 @@ jobs:
             -var="cors_allowed_origins=${{ secrets.CORS_ALLOWED_ORIGINS }}" \
             -var="frontend_url=${{ secrets.FRONTEND_URL }}" || echo "Backend resources already exist"
           
-          # S3バケット作成後、リモートバックエンドに移行
+          # S3バケットとDynamoDBテーブルが作成されたので、リモートバックエンドに移行
           echo "🔄 Migrating to remote backend..."
+          
           # main.tfのバックエンド設定を有効化
           sed -i 's/# backend "s3"/backend "s3"/' main.tf
-          sed -i 's/#   bucket/  bucket/' main.tf
+          sed -i 's/#   bucket/  bucket/' main.tf  
           sed -i 's/#   key/  key/' main.tf
           sed -i 's/#   region/  region/' main.tf
           sed -i 's/#   dynamodb_table/  dynamodb_table/' main.tf
           sed -i 's/#   encrypt/  encrypt/' main.tf
           sed -i 's/# }/}/' main.tf
           
-          # リモートバックエンドで再初期化
-          terraform init -migrate-state -force-copy || echo "State migration completed or already done"
+          # リモートバックエンドで再初期化（状態をS3に移行）
+          echo "yes" | terraform init -migrate-state || echo "State migration completed or already done"
 
       - name: Pre-deployment Cleanup (Terraform only)
         if: steps.check_star.outputs.action == 'start'
@@ -141,11 +146,7 @@ jobs:
             -t ${{ secrets.ECR_REPOSITORY_URL }}:nginx-latest \
             -f docker/nginx/Dockerfile . --push
 
-      - name: Terraform Init
-        if: steps.check_star.outputs.action == 'start'
-        id: terraform_init
-        working-directory: ./terraform
-        run: terraform init
+      # Terraform Init is now handled in Setup Terraform Backend step
 
       - name: Deploy Infrastructure (Star Added)
         if: steps.check_star.outputs.action == 'start'
