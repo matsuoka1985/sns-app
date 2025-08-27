@@ -7,13 +7,14 @@ terraform {
     }
   }
   
-  backend "s3" {
-    bucket         = "social-app-terraform-state-bucket-apne1"
-    key            = "terraform/state"
-    region         = "ap-northeast-1"
-    dynamodb_table = "social-app-terraform-locks"
-    encrypt        = true
-  }
+  # 初回デプロイ時はローカルバックエンド、S3バケット作成後にリモートバックエンドに移行
+  # backend "s3" {
+  #   bucket         = "social-app-terraform-state-bucket-apne1"
+  #   key            = "terraform/state"
+  #   region         = "ap-northeast-1"
+  #   dynamodb_table = "social-app-terraform-locks"
+  #   encrypt        = true
+  # }
 }
 
 provider "aws" {
