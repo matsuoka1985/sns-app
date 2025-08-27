@@ -58,6 +58,12 @@ jobs:
           role-session-name: social-app-deploy-session
           aws-region: ap-northeast-1
 
+      - name: Setup Terraform
+        if: steps.check_star.outputs.action == 'start'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.0
+
       - name: Setup Terraform Backend
         if: steps.check_star.outputs.action == 'start'
         run: |
@@ -94,12 +100,6 @@ jobs:
             -var="frontend_url=${{ secrets.FRONTEND_URL }}" || echo "No existing resources to destroy"
           cd ..
           echo "✅ Pre-deployment cleanup completed"
-
-      - name: Setup Terraform
-        if: steps.check_star.outputs.action == 'start'
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.5.0
 
       - name: Setup Docker Buildx
         if: steps.check_star.outputs.action == 'start'
