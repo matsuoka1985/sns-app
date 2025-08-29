@@ -61,7 +61,7 @@ RUN npm config set registry https://registry.npmjs.org/ && \
      (echo "Second npm install failed, retrying with different registry..." && npm config set registry https://registry.yarnpkg.com/ && npm install --no-fund --no-audit)) && \
     npm run build
 
-# .env準備（本番用は環境変数で上書き予定）
+# .env準備（本番用は環境変数で上書き予定。）
 RUN cp .env.example .env
 
 # Firebase認証情報ファイル作成（環境変数から）

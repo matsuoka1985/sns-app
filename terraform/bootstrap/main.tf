@@ -10,7 +10,7 @@ terraform {
 
 provider "aws" {
   region = "ap-northeast-1"
-  
+
   default_tags {
     tags = {
       Project   = "sns-app"
@@ -20,17 +20,17 @@ provider "aws" {
   }
 }
 
-# S3 Bucket for Terraform State
+# S3Bucket for Terraform State
 resource "aws_s3_bucket" "terraform_state" {
   bucket = "sns-app-terraform-state"
-  
+
   tags = {
     Name        = "sns-app-terraform-state"
     Description = "Terraform state storage"
   }
 }
 
-# S3 Bucket Versioning
+# S3Bucket Versioning
 resource "aws_s3_bucket_versioning" "terraform_state" {
   bucket = aws_s3_bucket.terraform_state.id
   versioning_configuration {
