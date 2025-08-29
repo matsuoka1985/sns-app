@@ -20,7 +20,7 @@ provider "aws" {
   }
 }
 
-# S3Bucket for Terraform State
+# S3 Bucket for Terraform State
 resource "aws_s3_bucket" "terraform_state" {
   bucket = "sns-app-terraform-state"
 
@@ -30,7 +30,7 @@ resource "aws_s3_bucket" "terraform_state" {
   }
 }
 
-# S3Bucket Versioning
+# S3 Bucket Versioning
 resource "aws_s3_bucket_versioning" "terraform_state" {
   bucket = aws_s3_bucket.terraform_state.id
   versioning_configuration {
