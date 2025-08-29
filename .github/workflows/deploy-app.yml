@@ -1,0 +1,104 @@
+name: Deploy Application
+
+on:
+  push:
+    paths:
+      - 'backend/**'
+      - 'docker/**'
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-northeast-1
+  PROJECT_NAME: sns-app
+  ENVIRONMENT: production
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::709588767777:role/sns-app-github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Laravel image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "🔨 Building Laravel image..."
+          docker build \
+            --target production \
+            -t $ECR_REGISTRY/$PROJECT_NAME-app:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$PROJECT_NAME-app:latest \
+            -f docker/php/Dockerfile .
+          
+          echo "📦 Pushing Laravel image..."
+          docker push $ECR_REGISTRY/$PROJECT_NAME-app:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$PROJECT_NAME-app:latest
+
+      - name: Build and push Nginx image  
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "🔨 Building Nginx image..."
+          docker build \
+            --target production \
+            -t $ECR_REGISTRY/$PROJECT_NAME-nginx:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$PROJECT_NAME-nginx:latest \
+            -f docker/nginx/Dockerfile .
+          
+          echo "📦 Pushing Nginx image..."
+          docker push $ECR_REGISTRY/$PROJECT_NAME-nginx:$IMAGE_TAG  
+          docker push $ECR_REGISTRY/$PROJECT_NAME-nginx:latest
+
+  update-service:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::709588767777:role/sns-app-github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Force ECS service update
+        run: |
+          echo "🔄 Updating ECS service with new images..."
+          aws ecs update-service \
+            --cluster $PROJECT_NAME-$ENVIRONMENT \
+            --service $PROJECT_NAME-$ENVIRONMENT \
+            --force-new-deployment
+
+      - name: Wait for deployment
+        run: |
+          echo "⏳ Waiting for deployment to complete..."
+          aws ecs wait services-stable \
+            --cluster $PROJECT_NAME-$ENVIRONMENT \
+            --services $PROJECT_NAME-$ENVIRONMENT
+
+      - name: Deployment Success
+        run: |
+          echo "✅ Deployment completed successfully!"
+          echo "🌐 Application URL: https://${{ secrets.DOMAIN_NAME }}"
