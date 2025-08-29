@@ -31,7 +31,7 @@ resource "random_string" "bucket_suffix" {
   upper   = false
 }
 
-# S3 Bucket for Terraform State
+# S3Bucket for Terraform State
 resource "aws_s3_bucket" "terraform_state" {
   bucket = "sns-app-terraform-state-${random_string.bucket_suffix.result}"
 
