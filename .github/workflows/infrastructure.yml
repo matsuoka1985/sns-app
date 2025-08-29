@@ -1,0 +1,87 @@
+name: Deploy Infrastructure
+
+on:
+  push:
+    paths:
+      - 'terraform/**'
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  deploy-bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::709588767777:role/sns-app-github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.7
+
+      - name: Deploy S3 Backend (Bootstrap)
+        working-directory: terraform/bootstrap
+        run: |
+          echo "🚀 Creating S3 backend and DynamoDB table..."
+          terraform init
+          terraform plan -out=bootstrap.tfplan
+          terraform apply bootstrap.tfplan
+
+  deploy-infrastructure:
+    needs: deploy-bootstrap
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::709588767777:role/sns-app-github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.7
+
+      - name: Deploy Main Infrastructure
+        working-directory: terraform
+        run: |
+          echo "🏗️ Deploying main infrastructure..."
+          terraform init
+          terraform plan \
+            -var="domain_name=${{ secrets.DOMAIN_NAME }}" \
+            -var="app_key=${{ secrets.APP_KEY }}" \
+            -var="db_username=${{ secrets.DB_USERNAME }}" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -out=tfplan
+          terraform apply tfplan
+
+      - name: Output Infrastructure Info
+        working-directory: terraform
+        run: |
+          echo "✅ Infrastructure deployed successfully!"
+          echo "🌐 ALB DNS: $(terraform output -raw alb_dns_name)"
+          echo "🔗 Domain: https://$(terraform output -raw domain_name)"
+          echo "📦 ECS Cluster: $(terraform output -raw ecs_cluster_name)"
