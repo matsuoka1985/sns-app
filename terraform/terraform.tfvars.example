@@ -1,0 +1,16 @@
+# AWS Configuration
+aws_region = "ap-northeast-1"
+
+# Project Configuration
+project_name = "sns-app"
+environment  = "production"
+
+# Domain Configuration (set in GitHub Secrets)
+domain_name = "smatsuoka.click"
+
+# Laravel Configuration (set in GitHub Secrets)
+app_key = "base64:your-app-key-here"
+
+# Database Configuration (set in GitHub Secrets)
+db_username = "your-db-username"
+db_password = "your-secure-password"

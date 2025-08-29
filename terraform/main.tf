@@ -6,65 +6,148 @@ terraform {
       version = "~> 5.0"
     }
   }
+  
+  backend "s3" {
+    bucket         = "sns-app-terraform-state"
+    key            = "sns-app/terraform.tfstate"
+    region         = "ap-northeast-1"
+    encrypt        = true
+    dynamodb_table = "sns-app-terraform-locks"
+  }
 }
 
 provider "aws" {
   region = var.aws_region
-}
-
-# Current AWS account and region data
-data "aws_caller_identity" "current" {}
-data "aws_availability_zones" "available" {
-  state = "available"
-}
-
-# VPC
-resource "aws_vpc" "main" {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_hostnames = true
-  enable_dns_support   = true
-
-  tags = {
-    Name = "${var.project_name}-vpc"
+  
+  default_tags {
+    tags = {
+      Environment = var.environment
+      Project     = var.project_name
+      ManagedBy   = "terraform"
+    }
   }
 }
 
-# Internet Gateway
-resource "aws_internet_gateway" "main" {
-  vpc_id = aws_vpc.main.id
-
-  tags = {
-    Name = "${var.project_name}-igw"
-  }
+# Variables
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+  default     = "ap-northeast-1"
 }
 
-# Public Subnet
-resource "aws_subnet" "public" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone       = data.aws_availability_zones.available.names[0]
-  map_public_ip_on_launch = true
-
-  tags = {
-    Name = "${var.project_name}-public-subnet"
-  }
+variable "environment" {
+  description = "Environment name"
+  type        = string
+  default     = "production"
 }
 
-# Route Table for Public Subnet
-resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.main.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.main.id
-  }
-
-  tags = {
-    Name = "${var.project_name}-public-rt"
-  }
+variable "project_name" {
+  description = "Project name"
+  type        = string
+  default     = "sns-app"
 }
 
-resource "aws_route_table_association" "public" {
-  subnet_id      = aws_subnet.public.id
-  route_table_id = aws_route_table.public.id
+variable "domain_name" {
+  description = "Domain name for the application"
+  type        = string
+}
+
+variable "app_key" {
+  description = "Laravel APP_KEY"
+  type        = string
+  sensitive   = true
+}
+
+variable "db_username" {
+  description = "Database username"
+  type        = string
+  sensitive   = true
+}
+
+variable "db_password" {
+  description = "Database password"
+  type        = string
+  sensitive   = true
+}
+
+# VPC Module
+module "vpc" {
+  source = "./modules/vpc"
+  
+  project_name = var.project_name
+  environment  = var.environment
+}
+
+# RDS Module
+module "rds" {
+  source = "./modules/rds"
+  
+  project_name       = var.project_name
+  environment        = var.environment
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+  vpc_cidr_block     = module.vpc.vpc_cidr_block
+  db_username        = var.db_username
+  db_password        = var.db_password
+}
+
+# ElastiCache Module
+module "elasticache" {
+  source = "./modules/elasticache"
+  
+  project_name       = var.project_name
+  environment        = var.environment
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+  vpc_cidr_block     = module.vpc.vpc_cidr_block
+}
+
+# ALB Module
+module "alb" {
+  source = "./modules/alb"
+  
+  project_name      = var.project_name
+  environment       = var.environment
+  vpc_id            = module.vpc.vpc_id
+  public_subnet_ids = module.vpc.public_subnet_ids
+  domain_name       = var.domain_name
+}
+
+# ECS Module
+module "ecs" {
+  source = "./modules/ecs"
+  
+  project_name         = var.project_name
+  environment          = var.environment
+  vpc_id               = module.vpc.vpc_id
+  private_subnet_ids   = module.vpc.private_subnet_ids
+  vpc_cidr_block       = module.vpc.vpc_cidr_block
+  app_key              = var.app_key
+  db_endpoint          = module.rds.endpoint
+  db_username          = var.db_username
+  db_password          = var.db_password
+  redis_endpoint       = module.elasticache.redis_endpoint
+  alb_target_group_arn = module.alb.target_group_arn
+  alb_security_group_id = module.alb.security_group_id
+}
+
+# Outputs
+output "alb_dns_name" {
+  description = "ALB DNS name"
+  value       = module.alb.dns_name
+}
+
+output "domain_name" {
+  description = "Application domain"
+  value       = var.domain_name
+}
+
+output "ecs_cluster_name" {
+  description = "ECS cluster name"
+  value       = module.ecs.cluster_name
+}
+
+output "ecs_service_name" {
+  description = "ECS service name"
+  value       = module.ecs.service_name
 }
