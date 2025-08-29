@@ -35,12 +35,17 @@ jobs:
           terraform_version: 1.5.7
 
       - name: Deploy S3 Backend (Bootstrap)
+        id: bootstrap
         working-directory: terraform/bootstrap
         run: |
-          echo "🚀 Creating S3 backend and DynamoDB table..."
+          echo "🚀 Creating S3 backend..."
           terraform init
           terraform plan -out=bootstrap.tfplan
           terraform apply bootstrap.tfplan
+          
+          # Get bucket name for next step
+          BUCKET_NAME=$(terraform output -raw s3_bucket_name)
+          echo "bucket_name=$BUCKET_NAME" >> $GITHUB_OUTPUT
 
   deploy-infrastructure:
     needs: deploy-bootstrap
@@ -64,6 +69,13 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.5.7
+
+      - name: Update Backend Configuration
+        working-directory: terraform
+        run: |
+          echo "🔧 Updating backend configuration with actual bucket name..."
+          BUCKET_NAME="${{ needs.deploy-bootstrap.outputs.bucket_name }}"
+          sed -i "s/sns-app-terraform-state/$BUCKET_NAME/g" main.tf
 
       - name: Deploy Main Infrastructure
         working-directory: terraform

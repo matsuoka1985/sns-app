@@ -8,11 +8,10 @@ terraform {
   }
   
   backend "s3" {
-    bucket         = "sns-app-terraform-state"
-    key            = "sns-app/terraform.tfstate"
-    region         = "ap-northeast-1"
-    encrypt        = true
-    dynamodb_table = "sns-app-terraform-locks"
+    bucket  = "sns-app-terraform-state"
+    key     = "sns-app/terraform.tfstate"
+    region  = "ap-northeast-1"
+    encrypt = true
   }
 }
 
